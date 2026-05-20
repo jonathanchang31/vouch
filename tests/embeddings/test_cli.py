@@ -46,3 +46,15 @@ def test_search_top_k_flag(kb: Path) -> None:
     runner = CliRunner()
     result = runner.invoke(cli, ["search", "x", "--top-k", "3"])
     assert result.exit_code == 0
+
+
+def test_reindex_embeddings_backfills(kb: Path) -> None:
+    from vouch import index_db
+    from vouch.storage import discover_root, KBStore
+    store = KBStore(discover_root(kb))
+    with index_db.open_db(store.kb_dir) as conn:
+        conn.execute("DELETE FROM embedding_index")
+    runner = CliRunner()
+    result = runner.invoke(cli, ["reindex", "--embeddings", "--backfill"])
+    assert result.exit_code == 0
+    assert index_db.get_embedding(store.kb_dir, kind="claim", id="c1") is not None

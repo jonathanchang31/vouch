@@ -564,6 +564,30 @@ def index() -> None:
 
 
 @cli.command()
+@click.option("--embeddings/--no-embeddings", default=False,
+              help="Rebuild the embedding index in addition to FTS5.")
+@click.option("--backfill/--no-backfill", default=False,
+              help="Re-encode every artifact under the current model.")
+@click.option("--force/--no-force", default=False,
+              help="Re-encode even if content hash unchanged.")
+@click.option("--model", default=None,
+              help="Adapter name; defaults to the registered default.")
+def reindex(embeddings: bool, backfill: bool, force: bool, model: str | None) -> None:
+    """Rebuild derived indexes from on-disk artifacts."""
+    store = _load_store()
+    health.rebuild_index(store)
+    if embeddings or backfill:
+        from .embeddings.migration import backfill_embeddings
+        if model:
+            from .embeddings import get_embedder
+            get_embedder(model)
+        n = backfill_embeddings(store, force=force)
+        click.echo(f"reindex: embeddings backfilled = {n}")
+    else:
+        click.echo("reindex: FTS5 rebuilt")
+
+
+@cli.command()
 @click.option("--tail", default=20, show_default=True, type=int)
 @click.option("--json", "as_json", is_flag=True)
 def audit(tail: int, as_json: bool) -> None:
