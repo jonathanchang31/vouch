@@ -164,6 +164,18 @@ def rebuild_index(store: KBStore) -> dict:
                 conn, id=e.id, name=e.name, description=e.description,
                 type=e.type.value, aliases=e.aliases,
             )
+    try:
+        from . import audit
+        from .embeddings.migration import detect_mismatch
+        m = detect_mismatch(store.kb_dir)
+        if m is not None:
+            audit.log_event(
+                store.kb_dir, event="embedding.model_mismatch",
+                actor="vouch-health",
+                object_ids=[], data=m,
+            )
+    except ImportError:
+        pass
     _rebuild_embeddings(store)
     return index_db.stats(store.kb_dir)
 
