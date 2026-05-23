@@ -13,7 +13,6 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-import numpy as np
 import pytest
 from click.testing import CliRunner
 
@@ -25,9 +24,11 @@ from vouch.storage import KBStore
 
 class _MockEmbedder:
     dim = 768
-    def encode(self, text: str) -> np.ndarray:
+    def encode(self, text: str):
+        import numpy as np
         return np.zeros(self.dim, dtype=np.float32)
-    def encode_batch(self, texts: list[str]) -> np.ndarray:
+    def encode_batch(self, texts: list[str]):
+        import numpy as np
         if not texts:
             return np.zeros((0, self.dim), dtype=np.float32)
         return np.zeros((len(texts), self.dim), dtype=np.float32)
