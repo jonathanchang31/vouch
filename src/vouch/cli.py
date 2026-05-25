@@ -534,9 +534,9 @@ def search(
 
     for k, i, snip, score in hits:
         if explain:
-            click.echo(f"[{used}] {k}/{i}\tscore={score:.4f}\t{snip}")
+            click.echo(f"[{used}] {k}/{i}\tscore={score:.4f}\t{snip}  ({used})")
         else:
-            click.echo(f"{k}/{i}\t{snip}")
+            click.echo(f"{k}/{i}\t{snip}  ({used})")
 
 
 @cli.command()
