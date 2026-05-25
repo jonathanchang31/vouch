@@ -53,14 +53,26 @@ METHODS = [
     "kb.import_check",
     "kb.import_apply",
     "kb.audit",
+    "kb.reindex_embeddings",
+    "kb.dedup_scan",
+    "kb.eval_embeddings",
+    "kb.embeddings_stats",
 ]
 
 
 def capabilities() -> Capabilities:
+    retrieval = ["fts5", "substring"]
+    try:
+        from .embeddings import get_embedder
+        get_embedder()
+        retrieval.append("embedding")
+        retrieval.append("hybrid")
+    except Exception:
+        pass
     return Capabilities(
         version=__version__,
         methods=METHODS,
-        retrieval=["fts5", "substring"],
+        retrieval=retrieval,
         review_gated=True,
         transports=["mcp", "jsonl"],
     )

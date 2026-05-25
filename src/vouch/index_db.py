@@ -12,6 +12,7 @@ second `backend` in the ContextItem response.
 from __future__ import annotations
 
 import datetime as _dt
+import json
 import sqlite3
 from collections.abc import Iterable
 from contextlib import contextmanager, suppress
@@ -31,6 +32,14 @@ CREATE VIRTUAL TABLE IF NOT EXISTS pages_fts USING fts5(
 
 CREATE VIRTUAL TABLE IF NOT EXISTS entities_fts USING fts5(
     id UNINDEXED, name, description, type UNINDEXED, aliases
+);
+
+CREATE TABLE IF NOT EXISTS embeddings (
+    kind TEXT NOT NULL,
+    id TEXT NOT NULL,
+    vec BLOB NOT NULL,
+    model TEXT NOT NULL DEFAULT 'all-MiniLM-L6-v2',
+    PRIMARY KEY (kind, id)
 );
 
 CREATE TABLE IF NOT EXISTS index_meta (
@@ -106,6 +115,52 @@ def reset(kb_dir: Path) -> None:
             "DELETE FROM embedding_dupes;"
             "DELETE FROM index_meta WHERE key LIKE 'embedding_%';"
         )
+
+
+def index_embedding(conn: sqlite3.Connection, *, kind: str, id: str,
+                    vec: list[float]) -> None:
+    conn.execute(
+        "INSERT OR REPLACE INTO embeddings (kind, id, vec) VALUES (?, ?, ?)",
+        (kind, id, json.dumps(vec)),
+    )
+
+
+def search_embeddings(kb_dir: Path, query_vec: list[float], *,
+                      limit: int = 10
+                      ) -> list[tuple[str, str, str, float]]:
+    """Return (kind, id, snippet, cosine_score) via brute-force NumPy scan."""
+    import numpy as np  # type: ignore[import-not-found]
+    out: list[tuple[str, str, str, float]] = []
+    if not query_vec:
+        return out
+    q = np.array(query_vec, dtype=np.float32)
+    q_norm = np.linalg.norm(q)
+    if q_norm == 0.0:
+        return out
+    q = q / q_norm
+    with open_db(kb_dir) as conn:
+        rows = conn.execute(
+            "SELECT kind, id, vec FROM embeddings"
+        ).fetchall()
+    for kind, eid, vec_json in rows:
+        v = np.array(json.loads(vec_json), dtype=np.float32)
+        if v.ndim != 1 or v.shape[0] != q.shape[0]:
+            continue
+        score = float(np.dot(q, v))
+        snippet = _snippet_for(kb_dir, kind, eid)
+        out.append((kind, eid, snippet, score))
+    out.sort(key=lambda x: x[3], reverse=True)
+    return out[:limit]
+
+
+def _snippet_for(kb_dir: Path, kind: str, eid: str) -> str:
+    path = kb_dir / kind / f"{eid}.yaml"
+    if not path.exists():
+        path = kb_dir / kind / f"{eid}.md"
+    if not path.exists():
+        return eid
+    text = path.read_text()
+    return text[:200].replace("\n", " ")
 
 
 def index_claim(conn: sqlite3.Connection, *, id: str, text: str,
@@ -359,7 +414,9 @@ def search_semantic(
         return []
     try:
         embedder = get_embedder()
-    except KeyError:
+    except (KeyError, ImportError):
+        # No embedder registered, or the adapter's heavy deps aren't
+        # installed -- semantic search is unavailable; let callers fall back.
         return []
     qvec = lookup_query_vec(kb_dir, query=query)
     # The query cache is keyed by text only; if the embedder model or
