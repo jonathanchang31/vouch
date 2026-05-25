@@ -57,10 +57,18 @@ METHODS = [
 
 
 def capabilities() -> Capabilities:
+    retrieval = ["fts5", "substring"]
+    try:
+        from .embeddings import get_embedder
+        get_embedder()
+        retrieval.append("embedding")
+        retrieval.append("hybrid")
+    except Exception:
+        pass
     return Capabilities(
         version=__version__,
         methods=METHODS,
-        retrieval=["fts5", "substring"],
+        retrieval=retrieval,
         review_gated=True,
         transports=["mcp", "jsonl"],
     )

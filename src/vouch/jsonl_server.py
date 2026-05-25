@@ -81,9 +81,6 @@ def _h_search(p: dict) -> list[dict]:
     hits: list[tuple[str, str, str, float]] = []
     used = backend_arg
 
-    # Reject unknown backends with a clear error rather than silently
-    # returning []. Falling through hides client typos and diverges from
-    # the MCP transport, which raises ValueError on the same input.
     valid_backends = {"auto", "embedding", "fts5", "substring", "hybrid"}
     if backend_arg not in valid_backends:
         raise ValueError(
@@ -126,6 +123,7 @@ def _h_search(p: dict) -> list[dict]:
         {"kind": k, "id": i, "snippet": sn, "score": sc, "backend": used}
         for k, i, sn, sc in hits
     ]
+
 
 
 def _h_context(p: dict) -> dict:

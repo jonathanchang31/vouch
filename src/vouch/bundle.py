@@ -209,8 +209,6 @@ class ImportCheckResult:
 
 
 def _validate_content(path: str, data: bytes, issues: list[str]) -> None:
-    if not any(path.endswith(ext) for ext in (".yaml", ".yml", ".md")):
-        return
     subdir = path.split("/")[0]
     # Source artifacts have two file kinds:
     #   sources/<sha>/meta.yaml  -- the Source pydantic model (validate)
@@ -221,6 +219,8 @@ def _validate_content(path: str, data: bytes, issues: list[str]) -> None:
         return
     validator = VALIDATORS.get(subdir)
     if validator is None:
+        return
+    if not any(path.lower().endswith(ext) for ext in (".yaml", ".yml", ".md")):
         return
     try:
         validator(data)
