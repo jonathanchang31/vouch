@@ -8,6 +8,12 @@ All notable changes to vouch are documented here. Format follows
 
 ## [0.1.0] — 2026-05-26
 
+### Packaging
+- Published to PyPI as `vouch-kb` (the `vouch` name was already taken by an
+  unrelated project); the installed command is still `vouch`. Install with
+  `pipx install vouch-kb`. A tag-triggered release workflow publishes via PyPI
+  Trusted Publishing (OIDC).
+
 ### Added
 - Seed a cited starter source and claim during `vouch init`, print first-run
   next steps, and document a 30-second onboarding tour (#54).
