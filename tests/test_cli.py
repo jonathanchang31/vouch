@@ -82,6 +82,27 @@ def test_show_missing_proposal_shows_clean_error(store: KBStore) -> None:
     _assert_clean_error(result, "proposal no-such-proposal")
 
 
+def test_fsck_clean_kb_prints_clean_and_exits_zero(store: KBStore) -> None:
+    from vouch.models import Claim
+    src = store.put_source(b"e")
+    store.put_claim(Claim(id="c1", text="t", evidence=[src.id]))
+    result = CliRunner().invoke(cli, ["fsck"])
+    # No state.db yet → info finding, but report.ok stays True.
+    assert result.exit_code == 0, result.output
+    assert "[index_missing]" in result.output
+
+
+def test_fsck_reports_dangling_chain_and_exits_nonzero(store: KBStore) -> None:
+    from vouch.models import Claim
+    src = store.put_source(b"e")
+    store.put_claim(Claim(
+        id="c1", text="t", evidence=[src.id], supersedes=["ghost"],
+    ))
+    result = CliRunner().invoke(cli, ["fsck"])
+    assert result.exit_code == 1, result.output
+    assert "dangling_supersedes" in result.output
+
+
 def test_search_fts5_backend_label(
     store: KBStore, monkeypatch: pytest.MonkeyPatch
 ) -> None:

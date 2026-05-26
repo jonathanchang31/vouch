@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from vouch import health
-from vouch.models import Claim, ClaimStatus, Relation
+from vouch import health, index_db
+from vouch.models import Claim, ClaimStatus, Proposal, ProposalKind, ProposalStatus, Relation
 from vouch.storage import KBStore
 
 
@@ -52,3 +52,152 @@ def test_list_claims_filtered_by_status(store: KBStore) -> None:
                           status=ClaimStatus.ARCHIVED))
     stable = [c for c in store.list_claims() if c.status == ClaimStatus.STABLE]
     assert [c.id for c in stable] == ["c1"]
+
+
+# --- fsck ----------------------------------------------------------------
+
+
+def _index_claim(store: KBStore, claim: Claim) -> None:
+    with index_db.open_db(store.kb_dir) as conn:
+        index_db.index_claim(
+            conn, id=claim.id, text=claim.text,
+            type=claim.type.value, status=claim.status.value, tags=claim.tags,
+        )
+
+
+def test_fsck_clean_kb_passes(store: KBStore) -> None:
+    src = store.put_source(b"e")
+    c = Claim(id="c1", text="t", evidence=[src.id])
+    store.put_claim(c)
+    _index_claim(store, c)
+    report = health.fsck(store)
+    assert report.ok is True
+    assert all(f.severity != "error" for f in report.findings)
+
+
+def test_fsck_flags_dangling_supersedes(store: KBStore) -> None:
+    src = store.put_source(b"e")
+    store.put_claim(Claim(id="c1", text="t", evidence=[src.id],
+                          supersedes=["ghost"]))
+    report = health.fsck(store)
+    codes = {f.code for f in report.findings}
+    assert "dangling_supersedes" in codes
+    assert report.ok is False
+
+
+def test_fsck_flags_dangling_superseded_by(store: KBStore) -> None:
+    src = store.put_source(b"e")
+    store.put_claim(Claim(id="c1", text="t", evidence=[src.id],
+                          superseded_by="ghost"))
+    report = health.fsck(store)
+    codes = {f.code for f in report.findings}
+    assert "dangling_superseded_by" in codes
+
+
+def test_fsck_flags_dangling_contradicts(store: KBStore) -> None:
+    src = store.put_source(b"e")
+    store.put_claim(Claim(id="c1", text="t", evidence=[src.id],
+                          contradicts=["ghost"]))
+    report = health.fsck(store)
+    codes = {f.code for f in report.findings}
+    assert "dangling_contradicts" in codes
+
+
+def test_fsck_flags_asymmetric_contradicts(store: KBStore) -> None:
+    src = store.put_source(b"e")
+    store.put_claim(Claim(id="c1", text="a", evidence=[src.id],
+                          contradicts=["c2"]))
+    store.put_claim(Claim(id="c2", text="b", evidence=[src.id]))
+    report = health.fsck(store)
+    codes = {f.code for f in report.findings}
+    assert "asymmetric_contradicts" in codes
+
+
+def test_fsck_decided_missing_artifact(store: KBStore) -> None:
+    store.put_proposal(Proposal(
+        id="prop-1",
+        kind=ProposalKind.CLAIM,
+        proposed_by="agent",
+        payload={"id": "vanished", "text": "t", "evidence": ["e1"]},
+        status=ProposalStatus.APPROVED,
+    ))
+    # Move it to decided/ so list_proposals finds it as approved.
+    src_path = store.kb_dir / "proposed" / "prop-1.yaml"
+    dst_path = store.kb_dir / "decided" / "prop-1.yaml"
+    dst_path.write_text(src_path.read_text())
+    src_path.unlink()
+
+    report = health.fsck(store)
+    codes = {f.code for f in report.findings}
+    assert "decided_missing_artifact" in codes
+
+
+def test_fsck_index_orphan_row(store: KBStore) -> None:
+    src = store.put_source(b"e")
+    c = Claim(id="real", text="t", evidence=[src.id])
+    store.put_claim(c)
+    _index_claim(store, c)
+    # Inject a row for a claim that doesn't exist on disk.
+    with index_db.open_db(store.kb_dir) as conn:
+        index_db.index_claim(
+            conn, id="ghost", text="x",
+            type="fact", status="working", tags=[],
+        )
+    report = health.fsck(store)
+    codes = {f.code for f in report.findings}
+    assert "index_orphan_claim" in codes
+
+
+def test_fsck_index_missing_row(store: KBStore) -> None:
+    src = store.put_source(b"e")
+    c = Claim(id="unindexed", text="t", evidence=[src.id])
+    store.put_claim(c)
+    # State.db exists but the row was never written.
+    with index_db.open_db(store.kb_dir) as _conn:
+        pass
+    report = health.fsck(store)
+    codes = {f.code for f in report.findings}
+    assert "index_missing_row" in codes
+
+
+def test_fsck_index_status_drift(store: KBStore) -> None:
+    src = store.put_source(b"e")
+    c = Claim(id="drifty", text="t", evidence=[src.id],
+              status=ClaimStatus.STABLE)
+    store.put_claim(c)
+    # Index says working, disk says stable — the #78 failure shape.
+    with index_db.open_db(store.kb_dir) as conn:
+        index_db.index_claim(
+            conn, id=c.id, text=c.text, type=c.type.value,
+            status="working", tags=c.tags,
+        )
+    report = health.fsck(store)
+    codes = {f.code for f in report.findings}
+    assert "index_status_drift" in codes
+
+
+def test_fsck_orphan_embedding(store: KBStore) -> None:
+    src = store.put_source(b"e")
+    c = Claim(id="real", text="t", evidence=[src.id])
+    store.put_claim(c)
+    _index_claim(store, c)
+    with index_db.open_db(store.kb_dir) as conn:
+        index_db.index_embedding(conn, kind="claim", id="ghost", vec=[0.1, 0.2])
+    report = health.fsck(store)
+    codes = {f.code for f in report.findings}
+    assert "orphan_embedding" in codes
+
+
+def test_fsck_without_state_db_reports_info(store: KBStore) -> None:
+    src = store.put_source(b"e")
+    store.put_claim(Claim(id="c1", text="t", evidence=[src.id]))
+    # The embedding write-hook may auto-create state.db on put_claim; this
+    # test verifies the explicit "no index yet" path.
+    db_path = store.kb_dir / index_db.DB_FILENAME
+    if db_path.exists():
+        db_path.unlink()
+    report = health.fsck(store)
+    codes = {f.code for f in report.findings}
+    assert "index_missing" in codes
+    # info finding alone shouldn't fail the report.
+    assert report.ok is True

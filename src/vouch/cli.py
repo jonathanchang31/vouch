@@ -185,6 +185,21 @@ def doctor() -> None:
     sys.exit(0 if report.ok else 1)
 
 
+@cli.command()
+def fsck() -> None:
+    """Deep consistency check: orphan embeddings, dangling supersede/contradict
+    chains, decided-proposal ↔ artifact mismatches, index-vs-file drift.
+    """
+    store = _load_store()
+    report = health.fsck(store)
+    for f in report.findings:
+        marker = {"error": "✗", "warning": "!", "info": "·"}.get(f.severity, "?")
+        click.echo(f"{marker} [{f.code}] {f.message}")
+    if not report.findings:
+        click.echo("clean")
+    sys.exit(0 if report.ok else 1)
+
+
 # --- proposals ------------------------------------------------------------
 
 

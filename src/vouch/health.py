@@ -13,7 +13,7 @@ from pathlib import Path
 
 from . import index_db
 from .audit import count_events
-from .models import ClaimStatus, ProposalStatus
+from .models import Claim, ClaimStatus, Entity, Page, ProposalKind, ProposalStatus
 from .storage import KBStore, sha256_hex
 from .verify import verify_all
 
@@ -143,6 +143,187 @@ def doctor(store: KBStore) -> HealthReport:
 
     report.ok = not any(f.severity == "error" for f in report.findings)
     return report
+
+
+def fsck(store: KBStore) -> HealthReport:
+    """Deep consistency check — orphaned embeddings, dangling lifecycle
+    chains, decided-proposal ↔ artifact mismatches, index-vs-file drift.
+
+    Read-only; report findings only. `--fix` is intentionally out of scope.
+    """
+    findings: list[Finding] = []
+    claims: dict[str, Claim] = {c.id: c for c in store.list_claims()}
+    pages: dict[str, Page] = {p.id: p for p in store.list_pages()}
+    entities: dict[str, Entity] = {e.id: e for e in store.list_entities()}
+
+    _check_lifecycle_chains(claims, findings)
+    _check_decided_proposals(store, claims, pages, entities, findings)
+
+    db_present = (store.kb_dir / index_db.DB_FILENAME).exists()
+    if not db_present:
+        findings.append(Finding(
+            "info", "index_missing",
+            "state.db not present — run `vouch index` to build it",
+        ))
+    else:
+        _check_index_drift(store, claims, pages, entities, findings)
+        _check_orphan_embeddings(store, claims, pages, entities, findings)
+
+    ok = not any(f.severity == "error" for f in findings)
+    return HealthReport(ok=ok, findings=findings, counts=status(store))
+
+
+def _check_lifecycle_chains(
+    claims: dict[str, Claim], findings: list[Finding],
+) -> None:
+    for cid, c in claims.items():
+        for target in c.supersedes:
+            if target not in claims:
+                findings.append(Finding(
+                    "error", "dangling_supersedes",
+                    f"claim {cid} supersedes missing claim {target}",
+                    [cid, target],
+                ))
+        if c.superseded_by is not None and c.superseded_by not in claims:
+            findings.append(Finding(
+                "error", "dangling_superseded_by",
+                f"claim {cid} superseded_by missing claim {c.superseded_by}",
+                [cid, c.superseded_by],
+            ))
+        for other in c.contradicts:
+            if other not in claims:
+                findings.append(Finding(
+                    "error", "dangling_contradicts",
+                    f"claim {cid} contradicts missing claim {other}",
+                    [cid, other],
+                ))
+                continue
+            if cid not in claims[other].contradicts:
+                findings.append(Finding(
+                    "warning", "asymmetric_contradicts",
+                    f"claim {cid} contradicts {other} but {other} does not "
+                    f"contradict {cid} back",
+                    [cid, other],
+                ))
+
+
+def _check_decided_proposals(
+    store: KBStore,
+    claims: dict[str, Claim],
+    pages: dict[str, Page],
+    entities: dict[str, Entity],
+    findings: list[Finding],
+) -> None:
+    relations = {r.id for r in store.list_relations()}
+    presence: dict[ProposalKind, set[str]] = {
+        ProposalKind.CLAIM: set(claims),
+        ProposalKind.PAGE: set(pages),
+        ProposalKind.ENTITY: set(entities),
+        ProposalKind.RELATION: relations,
+    }
+    for pr in store.list_proposals(ProposalStatus.APPROVED):
+        artifact_id = pr.payload.get("id") if isinstance(pr.payload, dict) else None
+        if not artifact_id:
+            findings.append(Finding(
+                "error", "decided_no_artifact_id",
+                f"approved proposal {pr.id} has no payload id",
+                [pr.id],
+            ))
+            continue
+        if artifact_id not in presence[pr.kind]:
+            findings.append(Finding(
+                "error", "decided_missing_artifact",
+                f"approved proposal {pr.id} promised "
+                f"{pr.kind.value} {artifact_id} but artifact is missing",
+                [pr.id, artifact_id],
+            ))
+
+
+def _check_index_drift(
+    store: KBStore,
+    claims: dict[str, Claim],
+    pages: dict[str, Page],
+    entities: dict[str, Entity],
+    findings: list[Finding],
+) -> None:
+    with index_db.open_db(store.kb_dir) as conn:
+        indexed_claims = {
+            (row[0], row[1]) for row in
+            conn.execute("SELECT id, status FROM claims_fts").fetchall()
+        }
+        indexed_pages = {row[0] for row in
+                         conn.execute("SELECT id FROM pages_fts").fetchall()}
+        indexed_entities = {row[0] for row in
+                            conn.execute("SELECT id FROM entities_fts").fetchall()}
+
+    indexed_claim_ids = {cid for cid, _ in indexed_claims}
+    for cid, status_in_index in indexed_claims:
+        if cid not in claims:
+            findings.append(Finding(
+                "error", "index_orphan_claim",
+                f"claims_fts row {cid} has no claim on disk",
+                [cid],
+            ))
+            continue
+        on_disk = claims[cid].status.value
+        if status_in_index != on_disk:
+            findings.append(Finding(
+                "error", "index_status_drift",
+                f"claim {cid} status on disk is {on_disk!r} but "
+                f"claims_fts has {status_in_index!r}",
+                [cid],
+            ))
+    for cid in claims.keys() - indexed_claim_ids:
+        findings.append(Finding(
+            "error", "index_missing_row",
+            f"claim {cid} on disk but missing from claims_fts",
+            [cid],
+        ))
+    for pid in indexed_pages - pages.keys():
+        findings.append(Finding(
+            "error", "index_orphan_page",
+            f"pages_fts row {pid} has no page on disk", [pid],
+        ))
+    for pid in pages.keys() - indexed_pages:
+        findings.append(Finding(
+            "error", "index_missing_row",
+            f"page {pid} on disk but missing from pages_fts", [pid],
+        ))
+    for eid in indexed_entities - entities.keys():
+        findings.append(Finding(
+            "error", "index_orphan_entity",
+            f"entities_fts row {eid} has no entity on disk", [eid],
+        ))
+    for eid in entities.keys() - indexed_entities:
+        findings.append(Finding(
+            "error", "index_missing_row",
+            f"entity {eid} on disk but missing from entities_fts", [eid],
+        ))
+
+
+def _check_orphan_embeddings(
+    store: KBStore,
+    claims: dict[str, Claim],
+    pages: dict[str, Page],
+    entities: dict[str, Entity],
+    findings: list[Finding],
+) -> None:
+    presence = {"claim": set(claims), "page": set(pages), "entity": set(entities)}
+    with index_db.open_db(store.kb_dir) as conn:
+        # Two tables exist: `embeddings` (legacy) and `embedding_index`
+        # (current). Check both — either one drifting silently breaks
+        # semantic retrieval.
+        for table in ("embeddings", "embedding_index"):
+            rows = conn.execute(f"SELECT kind, id FROM {table}").fetchall()
+            for kind, eid in rows:
+                live = presence.get(kind)
+                if live is None or eid in live:
+                    continue
+                findings.append(Finding(
+                    "warning", "orphan_embedding",
+                    f"{table} row for {kind} {eid} has no artifact on disk",
+                    [eid],
+                ))
 
 
 def rebuild_index(store: KBStore) -> dict:

@@ -6,6 +6,13 @@ All notable changes to vouch are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+- `vouch fsck` performs deep consistency checks beyond `vouch doctor`:
+  orphaned embeddings, dangling supersede/contradict chains, decided
+  proposals whose artifact is missing, and FTS5 index-vs-file drift
+  (orphan rows, missing rows, status drift). Read-only; reports findings
+  with object ids. `--fix` is intentionally out of scope (#96).
+
 ## [0.1.0] — 2026-05-26
 
 ### Packaging
