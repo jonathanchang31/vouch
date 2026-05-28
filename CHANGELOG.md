@@ -27,6 +27,7 @@ All notable changes to vouch are documented here. Format follows
   or dry-running pending proposals without bypassing the review gate.
 
 ### Fixed
+- `store.put_relation`, `store.put_relation_idempotent`, and `store.put_page` now reject artifacts whose foreign-id references don't resolve in the KB (relation `source` / `target` / `evidence`; page `entities` / `sources`). `proposals.propose_relation` and `proposals.propose_page` surface the same checks at proposal time as `ProposalError`. `bundle.import_check` and `sync.sync_check` run an equivalent cross-artifact pass against the post-merge id set so manifest-consistent bundles can't smuggle relations / pages whose references resolve to nothing — closes the write-time counterpart of the after-the-fact `dangling_relation` finding in `health.lint` (`src/vouch/health.py:135-145`).
 - Add `put_relation_idempotent()` to `KBStore` and use it in `supersede()` and `contradict()` so retrying after a partial failure converges to a consistent state instead of raising `ValueError`.
 - Raise `ProposalError("forbidden_self_approval")` in `proposals.approve()` when `approved_by == proposal.proposed_by`, enforcing the review-gate guarantee documented in the README and CONTRIBUTING.
 - `crystallize()` now sets `review.approver_role: trusted-agent` context so single-agent sessions can be crystallized without hitting the `forbidden_self_approval` guard (#47).
