@@ -126,24 +126,25 @@ def propose_claim(
                 store.get_evidence(eid)
             except ArtifactNotFoundError as e:
                 raise ProposalError(f"unknown source/evidence id: {eid}") from e
+    claim_id = slug_hint or _slugify(text)
+    claim_text = text.strip()
     payload = {
-        "id": slug_hint or _slugify(text),
-        "text": text.strip(),
+        "id": claim_id,
+        "text": claim_text,
         "type": claim_type,
         "confidence": confidence,
         "evidence": list(evidence),
         "entities": entities or [],
         "tags": tags or [],
     }
-    artifact_id = payload["id"]
     exclude_claim: str | None = None
-    if (store.kb_dir / "claims" / f"{artifact_id}.yaml").exists():
-        exclude_claim = artifact_id
+    if (store.kb_dir / "claims" / f"{claim_id}.yaml").exists():
+        exclude_claim = claim_id
 
     from .embeddings.similarity import find_similar_on_propose
 
     warnings = find_similar_on_propose(
-        store, payload["text"], exclude_claim_id=exclude_claim,
+        store, claim_text, exclude_claim_id=exclude_claim,
     )
 
     proposal = _file_proposal(
