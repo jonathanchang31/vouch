@@ -11,6 +11,7 @@ import pytest
 from vouch.logging_config import (
     VOUCH_LOGGER_NAME,
     JsonFormatter,
+    _VouchManagedHandler,
     configure_logging,
 )
 
@@ -96,7 +97,7 @@ def test_configure_logging_no_env_var_is_noop():
     selected = configure_logging()
     assert selected == "text"
     logger = logging.getLogger(VOUCH_LOGGER_NAME)
-    assert not any(getattr(h, "_vouch_managed", False) for h in logger.handlers)
+    assert not any(isinstance(h, _VouchManagedHandler) for h in logger.handlers)
     assert logger.propagate is True
 
 
@@ -106,7 +107,7 @@ def test_configure_logging_explicit_text_values_are_noop(monkeypatch, value):
     selected = configure_logging()
     assert selected == "text"
     logger = logging.getLogger(VOUCH_LOGGER_NAME)
-    assert not any(getattr(h, "_vouch_managed", False) for h in logger.handlers)
+    assert not any(isinstance(h, _VouchManagedHandler) for h in logger.handlers)
     assert logger.propagate is True
 
 
@@ -115,7 +116,7 @@ def test_configure_logging_json_installs_handler(monkeypatch):
     selected = configure_logging()
     assert selected == "json"
     logger = logging.getLogger(VOUCH_LOGGER_NAME)
-    managed = [h for h in logger.handlers if getattr(h, "_vouch_managed", False)]
+    managed = [h for h in logger.handlers if isinstance(h, _VouchManagedHandler)]
     assert len(managed) == 1
     assert isinstance(managed[0].formatter, JsonFormatter)
     assert logger.propagate is False
@@ -127,7 +128,7 @@ def test_configure_logging_is_idempotent(monkeypatch):
     configure_logging()
     configure_logging()
     logger = logging.getLogger(VOUCH_LOGGER_NAME)
-    managed = [h for h in logger.handlers if getattr(h, "_vouch_managed", False)]
+    managed = [h for h in logger.handlers if isinstance(h, _VouchManagedHandler)]
     assert len(managed) == 1
 
 
@@ -138,14 +139,14 @@ def test_configure_logging_switches_back_to_text(monkeypatch):
     selected = configure_logging()
     assert selected == "text"
     logger = logging.getLogger(VOUCH_LOGGER_NAME)
-    assert not any(getattr(h, "_vouch_managed", False) for h in logger.handlers)
+    assert not any(isinstance(h, _VouchManagedHandler) for h in logger.handlers)
 
 
 def test_json_handler_emits_one_object_per_line(monkeypatch):
     monkeypatch.setenv("VOUCH_LOG_FORMAT", "json")
     configure_logging()
     logger = logging.getLogger(VOUCH_LOGGER_NAME)
-    handler = next(h for h in logger.handlers if getattr(h, "_vouch_managed", False))
+    handler = next(h for h in logger.handlers if isinstance(h, _VouchManagedHandler))
     buf = io.StringIO()
     handler.stream = buf
     logger.setLevel(logging.INFO)

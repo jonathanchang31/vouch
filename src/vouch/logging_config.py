@@ -36,6 +36,15 @@ _STDLIB_RECORD_FIELDS = frozenset({
 })
 
 
+class _VouchManagedHandler(logging.StreamHandler):
+    """Marker subclass for the handler `configure_logging()` owns.
+
+    Identifying our handler by type (rather than tagging a plain
+    `StreamHandler` with an attribute) keeps the install/reuse/remove logic
+    readable and avoids an `attr-defined` ignore.
+    """
+
+
 class JsonFormatter(logging.Formatter):
     """Emit each log record as one JSON object per line.
 
@@ -92,25 +101,24 @@ def configure_logging() -> str:
     leaving the `vouch` logger in its stdlib default state.
 
     Safe to call from every entry point: handlers installed by a prior
-    call are detected via the `_vouch_managed` marker and reused rather
-    than stacked, so the function is idempotent across repeat invocations
-    and across format switches (e.g. text -> json -> text in tests).
+    call are detected by their `_VouchManagedHandler` type and reused
+    rather than stacked, so the function is idempotent across repeat
+    invocations and across format switches (e.g. text -> json -> text in
+    tests).
 
     Returns the selected format name (`"json"` or `"text"`).
     """
     selected = _selected_format()
     logger = logging.getLogger(VOUCH_LOGGER_NAME)
 
-    existing: logging.Handler | None = next(
-        (h for h in logger.handlers if getattr(h, "_vouch_managed", False)),
+    existing: _VouchManagedHandler | None = next(
+        (h for h in logger.handlers if isinstance(h, _VouchManagedHandler)),
         None,
     )
 
     if selected == "json":
-        handler: logging.Handler
         if existing is None:
-            handler = logging.StreamHandler(sys.stderr)
-            handler._vouch_managed = True  # type: ignore[attr-defined]
+            handler = _VouchManagedHandler(sys.stderr)
             logger.addHandler(handler)
         else:
             handler = existing
