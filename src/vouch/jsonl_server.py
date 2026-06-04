@@ -22,6 +22,7 @@ import os
 import sys
 import traceback
 from collections.abc import Callable
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
 
@@ -31,10 +32,13 @@ from . import sessions as sess_mod
 from . import verify as verify_mod
 from .capabilities import capabilities as build_caps
 from .context import build_context_pack
+from .logging_config import configure_logging
 from .models import ProposalStatus
 from .proposals import (
+    EXPIRE_ACTOR,
     ProposalError,
     approve,
+    expire_pending,
     propose_claim,
     propose_entity,
     propose_page,
@@ -48,6 +52,13 @@ from .storage import (
     discover_root,
 )
 
+# Per-request actor override. The HTTP transport sets this from the
+# X-Vouch-Agent header so audit attribution is correct without mutating
+# process-wide env (each ThreadingHTTPServer request thread gets its own
+# context, so this is concurrency-safe). stdio/JSONL leave it unset and
+# fall back to VOUCH_AGENT.
+_actor: ContextVar[str | None] = ContextVar("vouch_actor", default=None)
+
 
 def _store() -> KBStore:
     try:
@@ -57,7 +68,7 @@ def _store() -> KBStore:
 
 
 def _agent() -> str:
-    return os.environ.get("VOUCH_AGENT", "unknown-agent")
+    return _actor.get() or os.environ.get("VOUCH_AGENT", "unknown-agent")
 
 
 # --- per-method handlers ---------------------------------------------------
@@ -295,6 +306,22 @@ def _h_reject(p: dict) -> dict:
     return {"proposal_id": p["proposal_id"], "status": "rejected"}
 
 
+def _h_expire(p: dict) -> dict:
+    result = expire_pending(
+        _store(),
+        apply=bool(p.get("apply")),
+        expired_by=EXPIRE_ACTOR,
+        days=p.get("days"),
+    )
+    return {
+        "threshold_days": result.threshold_days,
+        "enabled": result.threshold_days > 0,
+        "dry_run": not bool(p.get("apply")),
+        "would_expire": [pr.id for pr in result.would_expire],
+        "expired": [pr.id for pr in result.expired],
+    }
+
+
 def _h_supersede(p: dict) -> dict:
     old, new = life.supersede(
         _store(), old_claim_id=p["old_claim_id"],
@@ -491,6 +518,7 @@ HANDLERS: dict[str, Callable[[dict], Any]] = {
     "kb.propose_relation": _h_propose_relation,
     "kb.approve": _h_approve,
     "kb.reject": _h_reject,
+    "kb.expire": _h_expire,
     "kb.supersede": _h_supersede,
     "kb.contradict": _h_contradict,
     "kb.archive": _h_archive,
@@ -551,6 +579,7 @@ def handle_request(envelope: dict) -> dict:
 
 def run_jsonl(stdin=None, stdout=None) -> None:
     """Read one request per line, write one response per line."""
+    configure_logging()
     stdin = stdin or sys.stdin
     stdout = stdout or sys.stdout
     for line in stdin:
