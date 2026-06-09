@@ -45,6 +45,19 @@ class ExpireResult:
     expired: list[Proposal] = field(default_factory=list)
 
 
+@dataclass
+class ProposeClaimResult:
+    """Outcome of `propose_claim` including optional similarity warnings."""
+
+    proposal: Proposal
+    warnings: list[dict[str, Any]] = field(default_factory=list)
+
+    # Backward-compatible accessors — most callers only need `.id`.
+    @property
+    def id(self) -> str:
+        return self.proposal.id
+
+
 def new_proposal_id() -> str:
     # Sortable timestamped id: '20260517-143052-<short>'. Sorted listings
     # naturally show oldest pending first, which matches review intuition.
@@ -100,7 +113,7 @@ def propose_claim(
     slug_hint: str | None = None,
     session_id: str | None = None,
     dry_run: bool = False,
-) -> Proposal:
+) -> ProposeClaimResult:
     if not text.strip():
         raise ProposalError("claim text is empty")
     if not evidence:
@@ -113,20 +126,38 @@ def propose_claim(
                 store.get_evidence(eid)
             except ArtifactNotFoundError as e:
                 raise ProposalError(f"unknown source/evidence id: {eid}") from e
+    claim_id = slug_hint or _slugify(text)
+    claim_text = text.strip()
     payload = {
-        "id": slug_hint or _slugify(text),
-        "text": text.strip(),
+        "id": claim_id,
+        "text": claim_text,
         "type": claim_type,
         "confidence": confidence,
         "evidence": list(evidence),
         "entities": entities or [],
         "tags": tags or [],
     }
-    return _file_proposal(
+    exclude_claim: str | None = None
+    if (store.kb_dir / "claims" / f"{claim_id}.yaml").exists():
+        exclude_claim = claim_id
+
+    warnings: list[dict[str, Any]] = []
+    try:
+        from .embeddings.similarity import find_similar_on_propose
+
+        warnings = find_similar_on_propose(
+            store, claim_text, exclude_claim_id=exclude_claim,
+        )
+    except ImportError:
+        # Base install has no numpy / embeddings extra — propose still works.
+        pass
+
+    proposal = _file_proposal(
         store, kind=ProposalKind.CLAIM, payload=payload,
         proposed_by=proposed_by, session_id=session_id,
         rationale=rationale, dry_run=dry_run,
     )
+    return ProposeClaimResult(proposal=proposal, warnings=warnings)
 
 
 def propose_page(
