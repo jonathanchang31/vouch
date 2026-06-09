@@ -23,7 +23,6 @@ from . import sessions as sess_mod
 from . import verify as verify_mod
 from .capabilities import capabilities as build_caps
 from .context import build_context_pack
-from .scoping import filter_hits, scoped_fetch_limit, viewer_from
 from .logging_config import configure_logging
 from .models import ProposalStatus
 from .proposals import (
@@ -37,6 +36,7 @@ from .proposals import (
     propose_relation,
     reject,
 )
+from .scoping import filter_hits, scoped_fetch_limit, viewer_from
 from .stats import collect_stats
 from .storage import (
     ArtifactNotFoundError,

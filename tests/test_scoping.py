@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from vouch import context, health
-from vouch.models import ArtifactScope, Claim, Source, Visibility
+from vouch.models import ArtifactScope, Claim, Visibility
 from vouch.scoping import ViewerContext, filter_hits, is_visible, viewer_from
 from vouch.storage import KBStore
 
