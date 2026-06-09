@@ -47,8 +47,6 @@ import json
 import logging
 import os
 import socket
-import threading
-import time
 from collections.abc import AsyncIterator, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -253,30 +251,16 @@ class BearerMiddleware(BaseHTTPMiddleware):
 # --- ASGI app builder -----------------------------------------------------
 
 
-def _attach_vouch_mcp_routes(routes: list, fastmcp_app: Starlette) -> ASGIApp:
-    """Take FastMCP's streamable_http_app and graft its `/mcp` route onto our
-    outer Starlette so vouch's custom routes (and bearer middleware) share
-    one process and one URL space.
+def _add_mcp_routes(routes: list, asgi: ASGIApp) -> None:
+    """Mount the same StreamableHTTPASGIApp at `/mcp` and the historical
+    `/messages` alias.
 
-    Use ``Route`` (not ``Mount``) so the path is exact -- ``Mount("/mcp", ...)``
+    Uses ``Route`` (not ``Mount``) so the path is exact -- ``Mount("/mcp", ...)``
     issues a 307 to ``/mcp/`` on a slash-less request, which Claude.ai's
-    connector validator follows but breaks naive POSTs. The inner
-    ``StreamableHTTPASGIApp`` is reused at both ``/mcp`` and the historical
-    ``/messages`` alias.
+    connector validator follows but breaks naive POSTs.
     """
-    inner: ASGIApp | None = None
-    for r in fastmcp_app.routes:
-        if isinstance(r, Route) and r.path == "/mcp":
-            inner = r.app
-            routes.append(Route("/mcp", endpoint=inner, methods=["GET", "POST", "DELETE"]))
-            routes.append(Route("/messages", endpoint=inner, methods=["GET", "POST", "DELETE"]))
-            break
-    if inner is None:
-        raise RuntimeError(
-            "FastMCP.streamable_http_app() did not expose a /mcp route -- "
-            "the SDK API has changed; vouch's HTTP transport needs updating."
-        )
-    return inner
+    routes.append(Route("/mcp", endpoint=asgi, methods=["GET", "POST", "DELETE"]))
+    routes.append(Route("/messages", endpoint=asgi, methods=["GET", "POST", "DELETE"]))
 
 
 def make_app(
@@ -290,9 +274,12 @@ def make_app(
     neither disables the bearer gate (the development default; the bind-policy
     in :func:`make_server` still refuses non-loopback hosts without one).
     """
-    # Late-bound import: pulls in 44 kb.* tool registrations. Doing it inside
-    # the builder lets unit tests for ServeConfig run without paying for the
-    # full server.py import chain.
+    # Late-bound imports: pulling in `vouch.server` registers 44 kb.* tools
+    # (and is expensive). Doing it inside the builder lets unit tests for
+    # ServeConfig run without paying for the full server.py import chain.
+    from mcp.server.fastmcp.server import StreamableHTTPASGIApp
+    from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
+
     from . import server as vouch_server
 
     accepted: list[str] = []
@@ -300,23 +287,31 @@ def make_app(
         accepted.append(token)
     accepted.extend(t for t in tokens if t)
 
-    # FastMCP's session manager is single-use per instance: once .run() has
-    # exited, the cached _session_manager can't be re-driven. Production never
-    # rebuilds the app, but tests that spin servers up and down would hit
-    # "called once per instance" on the second build. Reset before each app
-    # build so every server gets a fresh, runnable manager.
+    # Build a *fresh* StreamableHTTPSessionManager directly per call instead
+    # of mutating ``vouch_server.mcp._session_manager`` (a module-level
+    # singleton). The manager owns an anyio task group that can only be
+    # entered via ``.run()`` once per instance; two concurrent ``make_app()``
+    # calls would race on the singleton if we kept mutating it, so we side-
+    # step the issue by giving each ASGI app its own manager wired to the
+    # *same* underlying ``Server`` (which carries the kb.* tool registry).
     #
-    # Also force stateless + json-response mode. Stateful Streamable-HTTP
-    # requires the client to thread an Mcp-Session-Id header through every
-    # follow-up call, which Claude.ai's Custom Connector can do but many
-    # lightweight MCP clients (curl-based test packs, scripted integrations)
-    # cannot. vouch's kb.* surface has no per-session state to maintain --
-    # every call is independent against the same KB on disk -- so dropping
-    # the session requirement is a strict UX win with no semantic cost.
-    vouch_server.mcp._session_manager = None  # type: ignore[attr-defined]
-    vouch_server.mcp.settings.stateless_http = True
-    vouch_server.mcp.settings.json_response = True
-    fastmcp_app = vouch_server.mcp.streamable_http_app()
+    # Stateless + json-response are forced here, not on the singleton's
+    # settings: stateful Streamable-HTTP requires the client to thread an
+    # ``Mcp-Session-Id`` header through every follow-up call, which Claude.ai
+    # can do but many lightweight clients (curl, scripts) cannot. vouch's
+    # kb.* surface has no per-session state to maintain -- every call is
+    # independent against the same KB on disk -- so dropping the session
+    # requirement is a UX win with no semantic cost. Stateful clients that
+    # *do* send Mcp-Session-Id are not rejected; the header is ignored.
+    session_manager = StreamableHTTPSessionManager(
+        app=vouch_server.mcp._mcp_server,
+        event_store=vouch_server.mcp._event_store,
+        json_response=True,
+        stateless=True,
+        security_settings=vouch_server.mcp.settings.transport_security,
+        retry_interval=getattr(vouch_server.mcp, "_retry_interval", None),
+    )
+    mcp_asgi: ASGIApp = StreamableHTTPASGIApp(session_manager)
 
     routes: list = [
         Route("/healthz", _healthz, methods=["GET"]),
@@ -324,20 +319,13 @@ def make_app(
         Route("/capabilities", _capabilities, methods=["GET"]),
         Route("/rpc", _rpc, methods=["POST"]),
     ]
-    _attach_vouch_mcp_routes(routes, fastmcp_app)
-
-    session_manager = vouch_server.mcp._session_manager  # set by streamable_http_app
-    if session_manager is None:
-        # Defence-in-depth: streamable_http_app() lazily constructs the
-        # manager and we just reset it above, so it must exist now. Crash
-        # cleanly rather than booting a half-wired server.
-        raise RuntimeError("FastMCP session manager not constructed")
+    _add_mcp_routes(routes, mcp_asgi)
 
     @contextlib.asynccontextmanager
     async def _lifespan(_app: Starlette) -> AsyncIterator[None]:
-        # FastMCP's StreamableHTTPSessionManager owns an anyio task group --
-        # it can only operate while .run() is active. The Starlette lifespan
-        # is the right place to hold it open for the duration of the server.
+        # The session manager owns an anyio task group -- it can only operate
+        # while .run() is active. The Starlette lifespan is the right place
+        # to hold it open for the duration of the server.
         async with session_manager.run():
             yield
 
@@ -361,11 +349,10 @@ class _UvicornServerHandle:
     Internally uvicorn manages an asyncio loop in that thread.
     """
 
-    def __init__(self, app: ASGIApp, host: str, port: int, *, token_count: int):
+    def __init__(self, app: ASGIApp, host: str, port: int):
         self._app = app
         self._host = host
         self._requested_port = port
-        self._token_count = token_count  # for debug only
         self._server: uvicorn.Server | None = None
         self._actual_port: int | None = None
         self._bind_socket: socket.socket | None = None
@@ -373,7 +360,15 @@ class _UvicornServerHandle:
         # is called, matching the stdlib ThreadingHTTPServer behaviour the
         # test fixture relies on (it reads server_address right after
         # make_server returns).
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        #
+        # IPv6 vs IPv4: ``::1`` and any other colon-bearing literal use
+        # AF_INET6; everything else (including the symbolic ``localhost``
+        # which resolves to either family depending on /etc/hosts) defaults
+        # to AF_INET. Keeping the families explicit beats letting
+        # ``socket.create_server`` pick, because the host string flows
+        # through uvicorn's logs verbatim and we want what the user passed.
+        family = socket.AF_INET6 if ":" in host else socket.AF_INET
+        s = socket.socket(family, socket.SOCK_STREAM)
         try:
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             s.bind((host, port))
@@ -405,13 +400,16 @@ class _UvicornServerHandle:
         self._server.run()
 
     def shutdown(self) -> None:
+        # ``uvicorn.Server.should_exit`` is the documented graceful-stop
+        # signal; the serving loop polls it and drains. Earlier versions of
+        # this method polled ``server.started`` for up to 2.5 s -- but
+        # ``started`` is set to True at boot and never resets to False during
+        # a graceful exit, so the loop always burned the full timeout (#177
+        # review). The serving thread is created by the caller (tests use a
+        # daemon thread, ``run_http`` uses the main thread); reaping it is
+        # the caller's job, not ours.
         if self._server is not None:
             self._server.should_exit = True
-            # Give the server a tick to notice the flag and drain.
-            for _ in range(50):
-                if not self._server.started:
-                    break
-                time.sleep(0.05)
 
     def server_close(self) -> None:
         # uvicorn closes its socket when the run loop exits; our pre-bound
@@ -443,7 +441,7 @@ def make_server(
             "(set VOUCH_HTTP_TOKEN / pass --token / use config.yaml serve.bearer_tokens)"
         )
     app = make_app(token=token, tokens=tokens)
-    return _UvicornServerHandle(app, host, port, token_count=len(accepted))
+    return _UvicornServerHandle(app, host, port)
 
 
 def run_http(
@@ -462,13 +460,3 @@ def run_http(
         pass
     finally:
         server.server_close()
-
-
-# Re-export the legacy _Handler name as None so anything that imports it for
-# isinstance-style checks doesn't crash -- the stdlib request-handler model
-# isn't used anymore in the Starlette/uvicorn path.
-_Handler: type | None = None
-
-# Suppress unused-warning for the threading import: kept in case downstream
-# code still references it from the module namespace.
-_ = threading

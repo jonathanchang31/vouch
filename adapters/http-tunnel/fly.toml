@@ -9,6 +9,9 @@
 # Then point Claude.ai's Custom Connector at https://<your-app>.fly.dev/mcp
 # with the same VOUCH_TOKEN as the bearer.
 
+# REPLACE with your app name before `fly deploy`. Either run
+# `fly launch --name <your-app> --copy-config` (which rewrites this line for
+# you), or edit it here. `fly deploy` will refuse the literal "REPLACEME-vouch".
 app = "REPLACEME-vouch"
 primary_region = "iad"
 

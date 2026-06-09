@@ -171,6 +171,25 @@ def test_mcp_tools_list_returns_kb_surface(base_url: str) -> None:
     assert len(tools) >= 20, f"expected ≥20 kb.* tools, got {len(tools)}"
 
 
+def test_mcp_accepts_session_id_header_in_stateless_mode(base_url: str) -> None:
+    """A stateful client (e.g. one that pinned `Mcp-Session-Id` from a prior
+    deployment) must not be rejected when we switch to stateless mode.
+
+    The server runs ``stateless=True`` so each request is independent; clients
+    that *do* send the header should see it silently ignored rather than 4xx-d.
+    Regression for the PR #177 review question.
+    """
+    _initialize(base_url)
+    code, body = _post(
+        base_url, "/mcp",
+        {"jsonrpc": "2.0", "id": 99, "method": "tools/list"},
+        headers={"Mcp-Session-Id": "stale-client-session-from-yesterday"},
+    )
+    assert code == 200, body
+    assert body.get("jsonrpc") == "2.0"
+    assert body.get("id") == 99
+
+
 def test_mcp_tools_call_kb_status_round_trip(base_url: str, kb: KBStore) -> None:
     _initialize(base_url)
     code, body = _post(base_url, "/mcp", {
