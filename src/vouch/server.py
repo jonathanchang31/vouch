@@ -36,6 +36,7 @@ from .proposals import (
     propose_relation,
     reject,
 )
+from .stats import collect_stats
 from .storage import (
     ArtifactNotFoundError,
     KBNotFoundError,
@@ -72,6 +73,16 @@ def kb_capabilities() -> dict[str, Any]:
 def kb_status() -> dict[str, Any]:
     """Return KB artifact counts and health summary."""
     return health.status(_store())
+
+
+@mcp.tool()
+def kb_stats(*, days: int = 30) -> dict[str, Any]:
+    """Observability: pending by agent, review rates, citation coverage.
+
+    days: decision window in days; 0 means all-time.
+    """
+    since = None if days == 0 else days
+    return collect_stats(_store(), since_days=since)
 
 
 # === read tools (unrestricted) ============================================

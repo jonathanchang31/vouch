@@ -45,6 +45,7 @@ from .proposals import (
     propose_relation,
     reject,
 )
+from .stats import collect_stats
 from .storage import (
     ArtifactNotFoundError,
     KBNotFoundError,
@@ -80,6 +81,12 @@ def _h_capabilities(_: dict) -> dict:
 
 def _h_status(_: dict) -> dict:
     return health.status(_store())
+
+
+def _h_stats(p: dict) -> dict:
+    days = int(p.get("days", 30))
+    since = None if days == 0 else days
+    return collect_stats(_store(), since_days=since)
 
 
 def _h_search(p: dict) -> list[dict]:
@@ -506,6 +513,7 @@ def _h_embeddings_stats(_: dict) -> dict:
 HANDLERS: dict[str, Callable[[dict], Any]] = {
     "kb.capabilities": _h_capabilities,
     "kb.status": _h_status,
+    "kb.stats": _h_stats,
     "kb.search": _h_search,
     "kb.context": _h_context,
     "kb.read_page": _h_read_page,
