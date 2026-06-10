@@ -24,6 +24,7 @@ from . import __version__, bundle, health
 from . import audit as audit_mod
 from . import install_adapter as install_mod
 from . import lifecycle as life
+from . import metrics as metrics_mod
 from . import migrations as migrations_mod
 from . import pr_cache as prc_mod
 from . import sessions as sess_mod
@@ -427,6 +428,129 @@ def migrate(
 
     if check_only and result.steps:
         sys.exit(1)
+
+
+# --- metrics --------------------------------------------------------------
+
+
+def _fmt_pct(x: float | None) -> str:
+    return "—" if x is None else f"{x * 100:.1f}%"
+
+
+def _fmt_secs(x: float | None) -> str:
+    """Human-friendly duration for the table; raw seconds stay in --json."""
+    if x is None:
+        return "—"
+    if x < 90:
+        return f"{x:.0f}s"
+    if x < 5400:
+        return f"{x / 60:.1f}m"
+    if x < 172800:
+        return f"{x / 3600:.1f}h"
+    return f"{x / 86400:.1f}d"
+
+
+@cli.command()
+@click.option("--json", "as_json", is_flag=True,
+              help="Emit the stable JSON schema (see docs/metrics.md).")
+@click.option("--prometheus", "as_prom", is_flag=True,
+              help="Emit Prometheus textfile-collector format "
+                   "(write to <textfile_dir>/vouch.prom from a sidecar).")
+@click.option("--since", default=None,
+              help="Window the audit log: a duration like 30d / 12h / 2w, "
+                   "an ISO date like 2026-01-01, or 'all' (default: all).")
+@click.option("--until", default=None,
+              help="Upper bound for the window (same formats as --since).")
+@click.option("--stale-days", default=metrics_mod.DEFAULT_STALE_DAYS,
+              show_default=True, type=int,
+              help="A claim un-confirmed for this many days counts as stale "
+                   "(matches `vouch lint --stale-days`).")
+@click.option("--top", "top_actors", default=metrics_mod.DEFAULT_TOP_ACTORS,
+              show_default=True, type=int,
+              help="How many actors to show in the leaderboard (0 = all).")
+def metrics(as_json: bool, as_prom: bool, since: str | None, until: str | None,
+            stale_days: int, top_actors: int) -> None:
+    """Observability for the review gate + corpus (vouchdev/vouch#192).
+
+    \b
+    Examples:
+      vouch metrics                 # human table, all of history
+      vouch metrics --json          # stable schema for a Prometheus sidecar
+      vouch metrics --prometheus    # textfile-collector exposition
+      vouch metrics --since 30d     # only the last 30 days of the audit log
+      vouch metrics --since 2026-01-01 --until 2026-02-01
+
+    All numbers derive purely from .vouch/audit.log.jsonl + the artifact files
+    — no new on-disk state. The --json shape is documented and stable.
+    """
+    if as_json and as_prom:
+        raise click.ClickException("choose one of --json / --prometheus, not both")
+
+    store = _load_store()
+    try:
+        since_dt = metrics_mod.parse_since(since)
+        until_dt = metrics_mod.parse_since(until)
+        m = metrics_mod.compute(
+            store,
+            since=since_dt,
+            until=until_dt,
+            stale_after_days=stale_days,
+            top_actors=top_actors,
+        )
+    except metrics_mod.MetricsError as e:
+        raise click.ClickException(str(e)) from e
+
+    if as_json:
+        _emit_json(m.to_dict())
+        return
+    if as_prom:
+        click.echo(metrics_mod.render_prometheus(m), nl=False)
+        return
+
+    # --- human table ---
+    window = "all history" if m.since is None else f"since {m.since.isoformat()}"
+    if m.until is not None:
+        window += f" until {m.until.isoformat()}"
+    click.echo(f"vouch metrics  ({window})")
+    click.echo("")
+    click.echo("  review gate")
+    click.echo(f"    proposals created   {m.proposals_created}")
+    click.echo(f"    approved / rejected {m.approvals} / {m.rejections}")
+    click.echo(f"    approval rate       {_fmt_pct(m.approval_rate)}")
+    if m.approval_rate_by_kind:
+        per_kind = "  ".join(
+            f"{k}={_fmt_pct(v)}" for k, v in sorted(m.approval_rate_by_kind.items())
+        )
+        click.echo(f"      by kind           {per_kind}")
+    click.echo(f"    pending now         {m.pending_now}")
+    click.echo("")
+    click.echo("  corpus")
+    click.echo(f"    claims              {m.claims_total}  "
+               f"({m.claims_active} active)")
+    click.echo(f"    citation coverage   {_fmt_pct(m.citation_coverage)}  "
+               f"({m.claims_cited}/{m.claims_total} cited, "
+               f"{m.citation_broken} broken)")
+    click.echo(f"    stale ratio         {_fmt_pct(m.stale_ratio)}  "
+               f"({m.stale_claims} past {m.stale_after_days}d)")
+    if m.claims_by_status:
+        hist = "  ".join(f"{k}={v}" for k, v in sorted(m.claims_by_status.items()))
+        click.echo(f"    by status           {hist}")
+    click.echo("")
+    click.echo("  proposal lag (create → approve)")
+    lag = m.proposal_lag
+    click.echo(f"    samples             {lag.count}")
+    click.echo(f"    p50 / p90 / p99     "
+               f"{_fmt_secs(lag.p50)} / {_fmt_secs(lag.p90)} / {_fmt_secs(lag.p99)}")
+    click.echo(f"    mean / max          {_fmt_secs(lag.mean)} / {_fmt_secs(lag.max)}")
+    if m.actors:
+        click.echo("")
+        click.echo("  actors (proposed / approved / rejected / confirmed)")
+        for a in m.actors:
+            click.echo(f"    {a.actor:<18} "
+                       f"{a.proposed} / {a.approved} / {a.rejected} / {a.confirmed}")
+    click.echo("")
+    click.echo(f"  audit: {m.audit_events_in_window} events in window "
+               f"({m.audit_events_total} total)")
 
 
 # --- proposals ------------------------------------------------------------
