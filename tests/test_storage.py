@@ -343,6 +343,83 @@ def test_put_page_accepts_resolvable_entity_and_source_refs(
     assert store.get_page("p-ok").sources == [src.id]
 
 
+# --- claim graph references (#196) ---------------------------------------
+#
+# put_claim already rejects unresolvable `evidence`; these cover the Claim's
+# *other* four reference fields — entities / supersedes / superseded_by /
+# contradicts — which #124 left unchecked even though fsck declares dangling
+# supersedes/superseded_by/contradicts as error-severity findings.
+
+
+def test_put_claim_rejects_unknown_entity_ref(store: KBStore) -> None:
+    src = store.put_source(b"e")
+    bad = Claim(id="c-ent", text="t", evidence=[src.id], entities=["ghost"])
+    with pytest.raises(ValueError, match="unknown entity"):
+        store.put_claim(bad)
+    assert not (store.kb_dir / "claims" / "c-ent.yaml").exists()
+
+
+def test_put_claim_rejects_unknown_supersedes_ref(store: KBStore) -> None:
+    src = store.put_source(b"e")
+    bad = Claim(id="c-sup", text="t", evidence=[src.id], supersedes=["ghost"])
+    with pytest.raises(ValueError, match="unknown claim"):
+        store.put_claim(bad)
+    assert not (store.kb_dir / "claims" / "c-sup.yaml").exists()
+
+
+def test_put_claim_rejects_unknown_superseded_by_ref(store: KBStore) -> None:
+    src = store.put_source(b"e")
+    bad = Claim(id="c-sb", text="t", evidence=[src.id], superseded_by="ghost")
+    with pytest.raises(ValueError, match="unknown claim"):
+        store.put_claim(bad)
+    assert not (store.kb_dir / "claims" / "c-sb.yaml").exists()
+
+
+def test_put_claim_rejects_unknown_contradicts_ref(store: KBStore) -> None:
+    src = store.put_source(b"e")
+    bad = Claim(id="c-con", text="t", evidence=[src.id], contradicts=["ghost"])
+    with pytest.raises(ValueError, match="unknown claim"):
+        store.put_claim(bad)
+    assert not (store.kb_dir / "claims" / "c-con.yaml").exists()
+
+
+def test_put_claim_accepts_resolvable_graph_refs(store: KBStore) -> None:
+    src = store.put_source(b"e")
+    store.put_entity(Entity(id="ent1", name="E", type=EntityType.CONCEPT))
+    store.put_claim(Claim(id="base", text="b", evidence=[src.id]))
+    ok = Claim(
+        id="c-ok", text="t", evidence=[src.id],
+        entities=["ent1"], contradicts=["base"],
+    )
+    store.put_claim(ok)
+    assert store.get_claim("c-ok").entities == ["ent1"]
+    assert store.get_claim("c-ok").contradicts == ["base"]
+
+
+def test_update_claim_rejects_in_place_mutation_to_dangling_ref(
+    store: KBStore,
+) -> None:
+    src = store.put_source(b"e")
+    store.put_claim(Claim(id="c1", text="t", evidence=[src.id]))
+    c = store.get_claim("c1")
+    c.contradicts = ["ghost"]  # mutate after load — bypasses model validators
+    with pytest.raises(ValueError, match="unknown claim"):
+        store.update_claim(c)
+    # On-disk claim is untouched.
+    assert store.get_claim("c1").contradicts == []
+
+
+def test_lifecycle_contradict_round_trips_after_guard(store: KBStore) -> None:
+    """Honest lifecycle writes stay green: supersede/contradict load both
+    ends via get_claim, so their links always resolve."""
+    src = store.put_source(b"e")
+    store.put_claim(Claim(id="a", text="a", evidence=[src.id]))
+    store.put_claim(Claim(id="b", text="b", evidence=[src.id]))
+    lifecycle.contradict(store, claim_a="a", claim_b="b", actor="tester")
+    assert store.get_claim("a").contradicts == ["b"]
+    assert store.get_claim("b").contradicts == ["a"]
+
+
 # --- evidence -------------------------------------------------------------
 
 
