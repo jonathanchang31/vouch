@@ -784,5 +784,81 @@ def serve(transport: str) -> None:
         run_jsonl()
 
 
+# --- review-ui: browser-based review console -----------------------------
+
+
+@cli.command(name="review-ui")
+@click.option("--bind", "bind", default="127.0.0.1:7780", show_default=True,
+              help="host:port to bind. Refuses 0.0.0.0 in this MVP slice "
+                   "(auth lands with the HTTP-transport feature).")
+@click.option("--kb", "kb_root", default=None,
+              type=click.Path(exists=True, file_okay=False),
+              help="KB root (defaults to the nearest .vouch/ above cwd).")
+@click.option("--open-browser/--no-open-browser", default=True, show_default=True,
+              help="Open the browser to the queue on startup.")
+def review_ui(bind: str, kb_root: str | None, open_browser: bool) -> None:
+    """Run the browser-based review console.
+
+    \b
+    Examples:
+      vouch review-ui                     # bind 127.0.0.1:7780, open browser
+      vouch review-ui --bind 127.0.0.1:8000
+      vouch review-ui --no-open-browser   # ssh / headless friendly
+    """
+    if ":" not in bind:
+        raise click.ClickException(
+            f"--bind must be host:port (got {bind!r})"
+        )
+    host, _, port_str = bind.rpartition(":")
+    try:
+        port = int(port_str)
+    except ValueError as e:
+        raise click.ClickException(f"invalid port in --bind: {port_str!r}") from e
+
+    # The full design (issue #194) refuses 0.0.0.0 without --auth bearer.
+    # The MVP slice does not ship the Bearer-auth layer yet (depends on
+    # the HTTP-transport feature), so we refuse non-localhost binds
+    # outright — a clearer error than silently exposing an unauthenticated
+    # approve surface on the network.
+    if host not in ("127.0.0.1", "localhost", "::1"):
+        raise click.ClickException(
+            f"--bind {bind!r}: review-ui is localhost-only in the MVP slice. "
+            "Bearer-auth + non-loopback binding land alongside the HTTP "
+            "transport feature."
+        )
+
+    try:
+        from . import web as web_pkg
+    except ImportError as e:
+        raise click.ClickException(str(e)) from e
+
+    try:
+        app = web_pkg.create_app(kb_root)
+    except (FileNotFoundError, RuntimeError) as e:
+        raise click.ClickException(str(e)) from e
+
+    try:
+        import uvicorn
+    except ImportError as e:
+        raise click.ClickException(
+            "vouch review-ui needs the [web] extra. "
+            "Install with: pip install 'vouch-kb[web]'"
+        ) from e
+
+    if open_browser:
+        # Lazy-import webbrowser; some CI envs (headless) don't have a default
+        # browser configured and webbrowser.open() returns False rather than
+        # raising — that's fine, the URL is also printed to stdout.
+        import threading
+        import webbrowser
+        url = f"http://{host}:{port}/"
+        click.echo(f"vouch review-ui running at {url}")
+        threading.Timer(0.5, lambda: webbrowser.open(url)).start()
+    else:
+        click.echo(f"vouch review-ui running at http://{host}:{port}/")
+
+    uvicorn.run(app, host=host, port=port, log_level="info")
+
+
 if __name__ == "__main__":
     cli()

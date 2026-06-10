@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% set active = "queue" %}
+{% block title %}queue · vouch review{% endblock %}
+
+{% block content %}
+<section class="queue">
+  <header class="section-head">
+    <h1>pending</h1>
+    <span class="count">{{ count }} {% if count == 1 %}proposal{% else %}proposals{% endif %}</span>
+  </header>
+
+  {% if not items %}
+    <p class="empty">no pending proposals — every agent write has been reviewed.</p>
+  {% else %}
+    <ul class="queue-list">
+      {% for item in items %}
+        <li class="queue-row" id="proposal-{{ item.id }}">
+          <div class="queue-meta">
+            <span class="kind kind-{{ item.kind }}">{{ item.kind }}</span>
+            <a class="proposal-link" href="/claim/{{ item.id }}">{{ item.id }}</a>
+            <span class="by">by {{ item.proposed_by }}</span>
+            <time datetime="{{ item.proposed_at }}">{{ item.proposed_at }}</time>
+          </div>
+          <p class="preview">{{ item.preview }}</p>
+          <div class="actions">
+            <form method="post" action="/approve/{{ item.id }}" class="inline">
+              <button type="submit" class="approve">approve</button>
+            </form>
+            <form method="post" action="/reject/{{ item.id }}" class="inline">
+              <input type="text" name="reason" placeholder="reason (required)" required>
+              <button type="submit" class="reject">reject</button>
+            </form>
+          </div>
+        </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+</section>
+{% endblock %}
