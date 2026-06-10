@@ -303,7 +303,7 @@ def _in_window(ev: AuditEvent, since: datetime | None, until: datetime | None) -
         return False
     if since is not None and ts < since:
         return False
-    return not (until is not None and ts > until)
+    return until is None or ts <= until
 
 
 def compute(
@@ -562,6 +562,7 @@ def render_prometheus(m: Metrics, *, prefix: str = "vouch") -> str:
     the exposition is self-describing.
     """
     lines: list[str] = []
+    emitted_headers: set[str] = set()
 
     def gauge(name: str, help_text: str, value, labels=None) -> None:
         full = f"{prefix}_{name}"
@@ -575,8 +576,6 @@ def render_prometheus(m: Metrics, *, prefix: str = "vouch") -> str:
             lines.append(f"# TYPE {full} gauge")
             emitted_headers.add(header_key)
         lines.append(rendered)
-
-    emitted_headers: set[str] = set()
 
     gauge("proposals_created", "Proposals created in window.", m.proposals_created)
     gauge("approvals_total", "Approvals in window.", m.approvals)
