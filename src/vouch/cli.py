@@ -11,7 +11,7 @@ import getpass
 import json
 import os
 import sys
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import asdict
 from pathlib import Path
@@ -38,12 +38,7 @@ from .context import build_context_pack
 from .lifecycle import LifecycleError
 from .logging_config import configure_logging
 from .models import Proposal, ProposalKind, ProposalStatus
-from .onboarding import (
-    DEFAULT_TEMPLATE,
-    TEMPLATES,
-    available_templates,
-    seed_starter_kb,
-)
+from .onboarding import seed_starter_kb
 from .proposals import (
     EXPIRE_ACTOR,
     ProposalError,
@@ -102,11 +97,7 @@ def _whoami() -> str:
     # agent invokes the CLI it sets VOUCH_AGENT; honour it as the actor so
     # multi-agent attribution stays consistent across transports. VOUCH_USER
     # remains an escape hatch; OS user is the friendly default for humans.
-    return (
-        os.environ.get("VOUCH_AGENT")
-        or os.environ.get("VOUCH_USER")
-        or getpass.getuser()
-    )
+    return os.environ.get("VOUCH_AGENT") or os.environ.get("VOUCH_USER") or getpass.getuser()
 
 
 def _emit_json(obj) -> None:
@@ -135,33 +126,6 @@ def _echo(message: str = "", *, err: bool = False) -> None:
     click.echo(message, err=err, color=_color_enabled())
 
 
-_SEVERITY_STYLE = {
-    "error": {"marker": "✗", "fg": "red"},
-    "warning": {"marker": "!", "fg": "yellow"},
-    "info": {"marker": "·", "fg": "cyan"},
-}
-
-
-def _print_findings(findings: list) -> None:
-    for f in findings:
-        style = _SEVERITY_STYLE.get(f.severity, {"marker": "?", "fg": None})
-        line = f"{style['marker']} [{f.code}] {f.message}"
-        _echo(_style(line, fg=style["fg"]))
-
-
-def _progress_cb(verb: str) -> Callable[[str], None] | None:
-    # Progress is for humans watching a terminal; stay silent in pipes/CI/tests
-    # so machine output and captured test stdout aren't polluted. Writes to
-    # stderr so it never lands in piped stdout.
-    if not sys.stderr.isatty():
-        return None
-
-    def cb(step: str) -> None:
-        click.echo(_style(f"  … {verb} {step}", fg="cyan"), err=True)
-
-    return cb
-
-
 @click.group()
 @click.version_option(__version__, prog_name="vouch")
 def cli() -> None:
@@ -174,39 +138,19 @@ def cli() -> None:
 
 @cli.command()
 @click.option("--path", default=".", type=click.Path(file_okay=False), show_default=True)
-@click.option("--template", default=DEFAULT_TEMPLATE, show_default=True,
-              help="Starter pack to seed (e.g. gittensor for SN74 context).")
-def init(path: str, template: str) -> None:
+def init(path: str) -> None:
     """Initialise a .vouch/ knowledge base at PATH."""
-    if template not in available_templates():
-        raise click.ClickException(
-            f"unknown template '{template}' "
-            f"(available: {', '.join(available_templates())})"
-        )
     root = Path(path).resolve()
     root.mkdir(parents=True, exist_ok=True)
     store = KBStore.init(root)
-    if template == DEFAULT_TEMPLATE:
-        seed = seed_starter_kb(store, approved_by=_whoami())
-        health.rebuild_index(store)
-        audit_mod.log_event(store.kb_dir, event="kb.init", actor=_whoami())
-        click.echo(f"Initialised KB at {store.kb_dir}")
-        if seed.created_anything:
-            click.echo(f"Seeded starter claim: {seed.claim_id}")
-        else:
-            click.echo("Starter claim already present.")
+    seed = seed_starter_kb(store, approved_by=_whoami())
+    health.rebuild_index(store)
+    audit_mod.log_event(store.kb_dir, event="kb.init", actor=_whoami())
+    click.echo(f"Initialised KB at {store.kb_dir}")
+    if seed.created_anything:
+        click.echo(f"Seeded starter claim: {seed.claim_id}")
     else:
-        result = TEMPLATES[template](store, approved_by=_whoami())
-        health.rebuild_index(store)
-        audit_mod.log_event(store.kb_dir, event="kb.init", actor=_whoami())
-        click.echo(f"Initialised KB at {store.kb_dir}")
-        if result.created_anything:
-            click.echo(
-                f"Seeded {result.template} template: "
-                f"{len(result.created)} artifact(s)"
-            )
-        else:
-            click.echo(f"{result.template} template already present.")
+        click.echo("Starter claim already present.")
     click.echo("Next steps:")
     click.echo("  vouch status")
     click.echo("  vouch search agent")
@@ -243,23 +187,18 @@ def status(as_json: bool) -> None:
     if as_json:
         _emit_json(s)
         return
-    _echo(f"KB at {_style(str(s['kb_dir']), bold=True)}")
-    _echo(
-        f"  durable: {_style(str(s['claims']), fg='cyan')} claims  •  "
-        f"{_style(str(s['pages']), fg='cyan')} pages  •  "
-        f"{_style(str(s['sources']), fg='cyan')} sources  •  "
-        f"{_style(str(s['entities']), fg='cyan')} entities  •  "
-        f"{_style(str(s['relations']), fg='cyan')} relations"
+    click.echo(f"KB at {s['kb_dir']}")
+    click.echo(
+        f"  durable: {s['claims']} claims  •  {s['pages']} pages  •  "
+        f"{s['sources']} sources  •  {s['entities']} entities  •  "
+        f"{s['relations']} relations"
     )
     pending = s["pending_proposals"]
     pending_str = _style(str(pending), fg="yellow" if pending else "green")
     _echo(f"  pending: {pending_str} proposals")
     present = s["index_present"]
-    index_str = (
-        _style("present", fg="green") if present else _style("missing", fg="red")
-    )
-    _echo(f"  audit:   {_style(str(s['audit_events']), fg='cyan')} events  •  "
-          f"index: {index_str}")
+    index_str = _style("present", fg="green") if present else _style("missing", fg="red")
+    _echo(f"  audit:   {_style(str(s['audit_events']), fg='cyan')} events  •  index: {index_str}")
 
 
 @cli.command()
@@ -296,9 +235,11 @@ def stats(days: int, as_json: bool) -> None:
         )
     review = body["review"]
     window = "all time" if review["window_days"] is None else f"last {review['window_days']}d"
-    _echo(f"  review ({window}): "
-          f"{review['approved']} approved, {review['rejected']} rejected, "
-          f"{review['expired']} expired")
+    _echo(
+        f"  review ({window}): "
+        f"{review['approved']} approved, {review['rejected']} rejected, "
+        f"{review['expired']} expired"
+    )
     rate = review["approval_rate"]
     if rate is not None:
         _echo(f"  approval rate: {_style(f'{rate * 100:.1f}%', fg='cyan')}")
@@ -310,49 +251,43 @@ def stats(days: int, as_json: bool) -> None:
         f"claims with valid citations ({cov_str})"
     )
     if cites["invalid_claim"] or cites["broken_citation"]:
-        _echo(
-            f"    invalid: {cites['invalid_claim']}, "
-            f"broken: {cites['broken_citation']}"
-        )
+        _echo(f"    invalid: {cites['invalid_claim']}, broken: {cites['broken_citation']}")
 
 
 def _findings_json(report) -> list[dict[str, Any]]:
     return [
-        {"severity": f.severity, "code": f.code, "message": f.message,
-         "object_ids": list(getattr(f, "object_ids", []) or [])}
+        {
+            "severity": f.severity,
+            "code": f.code,
+            "message": f.message,
+            "object_ids": list(getattr(f, "object_ids", []) or []),
+        }
         for f in report.findings
     ]
 
 
 @cli.command()
 @click.option("--stale-days", default=180, show_default=True, type=int)
-@click.option("--json", "as_json", is_flag=True, help="Emit findings as JSON.")
-def lint(stale_days: int, as_json: bool) -> None:
+def lint(stale_days: int) -> None:
     """Surface user-actionable problems: broken citations, stale claims, dangling refs."""
     store = _load_store()
     report = health.lint(store, stale_after_days=stale_days)
-    if as_json:
-        _emit_json({"ok": report.ok, "findings": _findings_json(report)})
-        sys.exit(0 if report.ok else 1)
-    _print_findings(report.findings)
+    for f in report.findings:
+        marker = {"error": "✗", "warning": "!", "info": "·"}.get(f.severity, "?")
+        click.echo(f"{marker} [{f.code}] {f.message}")
     if not report.findings:
-        _echo(_style("clean", fg="green"))
+        click.echo("clean")
     sys.exit(0 if report.ok else 1)
 
 
 @cli.command()
-@click.option("--json", "as_json", is_flag=True, help="Emit findings as JSON.")
-def doctor(as_json: bool) -> None:
+def doctor() -> None:
     """Full health sweep: lint + source verification + index check."""
     store = _load_store()
-    report = health.doctor(store, on_progress=_progress_cb("verifying"))
-    if as_json:
-        _emit_json({
-            "ok": report.ok, "counts": report.counts,
-            "findings": _findings_json(report),
-        })
-        sys.exit(0 if report.ok else 1)
-    _print_findings(report.findings)
+    report = health.doctor(store)
+    for f in report.findings:
+        marker = {"error": "✗", "warning": "!", "info": "·"}.get(f.severity, "?")
+        click.echo(f"{marker} [{f.code}] {f.message}")
     click.echo(f"-- {report.counts}")
     sys.exit(0 if report.ok else 1)
 
@@ -552,9 +487,7 @@ def migrate_verify(as_json: bool) -> None:
     if as_json:
         _emit_json(result)
     elif result["ok"]:
-        click.echo(
-            f"verified {result['checked']} artifact(s) at schema {result['schema_version']}"
-        )
+        click.echo(f"verified {result['checked']} artifact(s) at schema {result['schema_version']}")
     else:
         click.echo(f"FAILED: {len(result['errors'])} of {result['checked']} artifact(s)")
         for err in result["errors"]:
@@ -584,25 +517,47 @@ def _fmt_secs(x: float | None) -> str:
 
 
 @cli.command()
-@click.option("--json", "as_json", is_flag=True,
-              help="Emit the stable JSON schema (see docs/metrics.md).")
-@click.option("--prometheus", "as_prom", is_flag=True,
-              help="Emit Prometheus textfile-collector format "
-                   "(write to <textfile_dir>/vouch.prom from a sidecar).")
-@click.option("--since", default=None,
-              help="Window the audit log: a duration like 30d / 12h / 2w, "
-                   "an ISO date like 2026-01-01, or 'all' (default: all).")
-@click.option("--until", default=None,
-              help="Upper bound for the window (same formats as --since).")
-@click.option("--stale-days", default=metrics_mod.DEFAULT_STALE_DAYS,
-              show_default=True, type=int,
-              help="A claim un-confirmed for this many days counts as stale "
-                   "(matches `vouch lint --stale-days`).")
-@click.option("--top", "top_actors", default=metrics_mod.DEFAULT_TOP_ACTORS,
-              show_default=True, type=int,
-              help="How many actors to show in the leaderboard (0 = all).")
-def metrics(as_json: bool, as_prom: bool, since: str | None, until: str | None,
-            stale_days: int, top_actors: int) -> None:
+@click.option(
+    "--json", "as_json", is_flag=True, help="Emit the stable JSON schema (see docs/metrics.md)."
+)
+@click.option(
+    "--prometheus",
+    "as_prom",
+    is_flag=True,
+    help="Emit Prometheus textfile-collector format "
+    "(write to <textfile_dir>/vouch.prom from a sidecar).",
+)
+@click.option(
+    "--since",
+    default=None,
+    help="Window the audit log: a duration like 30d / 12h / 2w, "
+    "an ISO date like 2026-01-01, or 'all' (default: all).",
+)
+@click.option("--until", default=None, help="Upper bound for the window (same formats as --since).")
+@click.option(
+    "--stale-days",
+    default=metrics_mod.DEFAULT_STALE_DAYS,
+    show_default=True,
+    type=int,
+    help="A claim un-confirmed for this many days counts as stale "
+    "(matches `vouch lint --stale-days`).",
+)
+@click.option(
+    "--top",
+    "top_actors",
+    default=metrics_mod.DEFAULT_TOP_ACTORS,
+    show_default=True,
+    type=int,
+    help="How many actors to show in the leaderboard (0 = all).",
+)
+def metrics(
+    as_json: bool,
+    as_prom: bool,
+    since: str | None,
+    until: str | None,
+    stale_days: int,
+    top_actors: int,
+) -> None:
     """Observability for the review gate + corpus (vouchdev/vouch#192).
 
     \b
@@ -658,13 +613,16 @@ def metrics(as_json: bool, as_prom: bool, since: str | None, until: str | None,
     click.echo(f"    pending now         {m.pending_now}")
     click.echo("")
     click.echo("  corpus")
-    click.echo(f"    claims              {m.claims_total}  "
-               f"({m.claims_active} active)")
-    click.echo(f"    citation coverage   {_fmt_pct(m.citation_coverage)}  "
-               f"({m.claims_cited}/{m.claims_total} cited, "
-               f"{m.citation_broken} broken)")
-    click.echo(f"    stale ratio         {_fmt_pct(m.stale_ratio)}  "
-               f"({m.stale_claims} past {m.stale_after_days}d)")
+    click.echo(f"    claims              {m.claims_total}  ({m.claims_active} active)")
+    click.echo(
+        f"    citation coverage   {_fmt_pct(m.citation_coverage)}  "
+        f"({m.claims_cited}/{m.claims_total} cited, "
+        f"{m.citation_broken} broken)"
+    )
+    click.echo(
+        f"    stale ratio         {_fmt_pct(m.stale_ratio)}  "
+        f"({m.stale_claims} past {m.stale_after_days}d)"
+    )
     if m.claims_by_status:
         hist = "  ".join(f"{k}={v}" for k, v in sorted(m.claims_by_status.items()))
         click.echo(f"    by status           {hist}")
@@ -672,18 +630,22 @@ def metrics(as_json: bool, as_prom: bool, since: str | None, until: str | None,
     click.echo("  proposal lag (create → approve)")
     lag = m.proposal_lag
     click.echo(f"    samples             {lag.count}")
-    click.echo(f"    p50 / p90 / p99     "
-               f"{_fmt_secs(lag.p50)} / {_fmt_secs(lag.p90)} / {_fmt_secs(lag.p99)}")
+    click.echo(
+        f"    p50 / p90 / p99     "
+        f"{_fmt_secs(lag.p50)} / {_fmt_secs(lag.p90)} / {_fmt_secs(lag.p99)}"
+    )
     click.echo(f"    mean / max          {_fmt_secs(lag.mean)} / {_fmt_secs(lag.max)}")
     if m.actors:
         click.echo("")
         click.echo("  actors (proposed / approved / rejected / confirmed)")
         for a in m.actors:
-            click.echo(f"    {a.actor:<18} "
-                       f"{a.proposed} / {a.approved} / {a.rejected} / {a.confirmed}")
+            click.echo(
+                f"    {a.actor:<18} {a.proposed} / {a.approved} / {a.rejected} / {a.confirmed}"
+            )
     click.echo("")
-    click.echo(f"  audit: {m.audit_events_in_window} events in window "
-               f"({m.audit_events_total} total)")
+    click.echo(
+        f"  audit: {m.audit_events_in_window} events in window ({m.audit_events_total} total)"
+    )
 
 
 # --- proposals ------------------------------------------------------------
@@ -702,12 +664,7 @@ def pending(as_json: bool) -> None:
         click.echo("no pending proposals")
         return
     for pr in pending:
-        preview = (
-            pr.payload.get("text")
-            or pr.payload.get("title")
-            or pr.payload.get("name")
-            or "—"
-        )
+        preview = pr.payload.get("text") or pr.payload.get("title") or pr.payload.get("name") or "—"
         click.echo(f"• {pr.id}  [{pr.kind.value}]  by {pr.proposed_by}")
         click.echo(f"    {str(preview).strip()[:120]}")
 
@@ -792,10 +749,7 @@ def review(limit: int | None, kind: str | None, dry_run: bool) -> None:
             decided += 1
             continue
 
-        reason = (
-            click.prompt("Approval reason", default="", show_default=False).strip()
-            or None
-        )
+        reason = click.prompt("Approval reason", default="", show_default=False).strip() or None
         if dry_run:
             click.echo(f"Would approve {pr.id}")
         else:
@@ -824,9 +778,10 @@ def show(proposal_id: str) -> None:
 @click.argument("proposal_ids", nargs=-1, required=True)
 @click.option("--reason", default=None)
 @click.option(
-    "--keep-going", is_flag=True,
+    "--keep-going",
+    is_flag=True,
     help="Best-effort: approve every id that can be approved and report the "
-         "rest, instead of the default all-or-nothing precheck.",
+    "rest, instead of the default all-or-nothing precheck.",
 )
 def approve(proposal_ids: tuple[str, ...], reason: str | None, keep_going: bool) -> None:
     """Approve one or more proposals — converts each into a durable artifact.
@@ -899,14 +854,18 @@ def _expire_row(proposal: Proposal) -> dict[str, Any]:
 
 @cli.command()
 @click.option("--apply", is_flag=True, help="Expire stale proposals (default is dry-run).")
-@click.option("--days", type=int, default=None,
-              help="Override review.expire_pending_after_days for this run.")
+@click.option(
+    "--days", type=int, default=None, help="Override review.expire_pending_after_days for this run."
+)
 @click.option("--json", "as_json", is_flag=True, help="Emit JSON instead of text.")
 def expire(apply: bool, days: int | None, as_json: bool) -> None:
     """Garbage-collect pending proposals older than the configured threshold."""
     store = _load_store()
     result = expire_pending(
-        store, apply=apply, expired_by=EXPIRE_ACTOR, days=days,
+        store,
+        apply=apply,
+        expired_by=EXPIRE_ACTOR,
+        days=days,
     )
     if as_json:
         payload: dict[str, Any] = {
@@ -924,9 +883,7 @@ def expire(apply: bool, days: int | None, as_json: bool) -> None:
         return
 
     if not result.would_expire:
-        click.echo(
-            f"no stale pending proposals (threshold: {result.threshold_days} days)"
-        )
+        click.echo(f"no stale pending proposals (threshold: {result.threshold_days} days)")
         return
 
     if not apply:
@@ -943,8 +900,7 @@ def expire(apply: bool, days: int | None, as_json: bool) -> None:
         return
 
     click.echo(
-        f"expired {len(result.expired)} proposal(s) "
-        f"(threshold: {result.threshold_days} days)"
+        f"expired {len(result.expired)} proposal(s) (threshold: {result.threshold_days} days)"
     )
     for pr in result.expired:
         click.echo(f"  {pr.id}  [{pr.kind.value}]")
@@ -964,21 +920,32 @@ def _format_similarity_warning(w: dict) -> str:
 
 @cli.command(name="propose-claim")
 @click.option("--text", required=True)
-@click.option("--source", "sources", multiple=True, required=True,
-              help="Source or evidence id. Repeatable.")
+@click.option(
+    "--source", "sources", multiple=True, required=True, help="Source or evidence id. Repeatable."
+)
 @click.option("--type", "claim_type", default="observation", show_default=True)
 @click.option("--confidence", default=0.7, show_default=True, type=float)
 @click.option("--rationale", default=None)
 @click.option("--tag", "tags", multiple=True)
-def propose_claim_cmd(text: str, sources: tuple[str, ...], claim_type: str,
-                      confidence: float, rationale: str | None,
-                      tags: tuple[str, ...]) -> None:
+def propose_claim_cmd(
+    text: str,
+    sources: tuple[str, ...],
+    claim_type: str,
+    confidence: float,
+    rationale: str | None,
+    tags: tuple[str, ...],
+) -> None:
     store = _load_store()
     with _cli_errors():
         result = propose_claim(
-            store, text=text, evidence=list(sources),
-            proposed_by=_whoami(), claim_type=claim_type,
-            confidence=confidence, tags=list(tags), rationale=rationale,
+            store,
+            text=text,
+            evidence=list(sources),
+            proposed_by=_whoami(),
+            claim_type=claim_type,
+            confidence=confidence,
+            tags=list(tags),
+            rationale=rationale,
         )
     click.echo(result.id)
     for w in result.warnings:
@@ -991,15 +958,20 @@ def propose_claim_cmd(text: str, sources: tuple[str, ...], claim_type: str,
 @click.option("--type", "page_type", default="concept", show_default=True)
 @click.option("--claim", "claims", multiple=True)
 @click.option("--entity", "entities", multiple=True)
-def propose_page_cmd(title: str, body: str, page_type: str,
-                     claims: tuple[str, ...], entities: tuple[str, ...]) -> None:
+def propose_page_cmd(
+    title: str, body: str, page_type: str, claims: tuple[str, ...], entities: tuple[str, ...]
+) -> None:
     store = _load_store()
     if body == "-":
         body = sys.stdin.read()
     with _cli_errors():
         pr = propose_page(
-            store, title=title, body=body, page_type=page_type,
-            claim_ids=list(claims), entity_ids=list(entities),
+            store,
+            title=title,
+            body=body,
+            page_type=page_type,
+            claim_ids=list(claims),
+            entity_ids=list(entities),
             proposed_by=_whoami(),
         )
     click.echo(pr.id)
@@ -1010,13 +982,18 @@ def propose_page_cmd(title: str, body: str, page_type: str,
 @click.option("--type", "entity_type", required=True)
 @click.option("--alias", "aliases", multiple=True)
 @click.option("--description", default=None)
-def propose_entity_cmd(name: str, entity_type: str, aliases: tuple[str, ...],
-                       description: str | None) -> None:
+def propose_entity_cmd(
+    name: str, entity_type: str, aliases: tuple[str, ...], description: str | None
+) -> None:
     store = _load_store()
     with _cli_errors():
         pr = propose_entity(
-            store, name=name, entity_type=entity_type,
-            aliases=list(aliases), description=description, proposed_by=_whoami(),
+            store,
+            name=name,
+            entity_type=entity_type,
+            aliases=list(aliases),
+            description=description,
+            proposed_by=_whoami(),
         )
     click.echo(pr.id)
 
@@ -1030,8 +1007,12 @@ def propose_relation_cmd(src: str, relation: str, target: str, confidence: float
     store = _load_store()
     with _cli_errors():
         pr = propose_relation(
-            store, src=src, relation=relation, target=target,
-            confidence=confidence, proposed_by=_whoami(),
+            store,
+            src=src,
+            relation=relation,
+            target=target,
+            confidence=confidence,
+            proposed_by=_whoami(),
         )
     click.echo(pr.id)
 
@@ -1049,8 +1030,7 @@ def source() -> None:
 @click.option("--title", default=None)
 @click.option("--url", default=None)
 @click.option("--type", "source_type", default="file", show_default=True)
-def source_add(path: str, title: str | None, url: str | None,
-               source_type: str) -> None:
+def source_add(path: str, title: str | None, url: str | None, source_type: str) -> None:
     """Register a file as a Source; prints its sha256 id."""
     store = _load_store()
     data = Path(path).read_bytes()
@@ -1063,7 +1043,10 @@ def source_add(path: str, title: str | None, url: str | None,
             source_type=source_type,
         )
     audit_mod.log_event(
-        store.kb_dir, event="source.add", actor=_whoami(), object_ids=[src.id],
+        store.kb_dir,
+        event="source.add",
+        actor=_whoami(),
+        object_ids=[src.id],
     )
     click.echo(src.id)
 
@@ -1096,8 +1079,7 @@ def supersede(old_claim_id: str, new_claim_id: str) -> None:
     """Mark OLD as superseded by NEW."""
     store = _load_store()
     with _cli_errors():
-        life.supersede(store, old_claim_id=old_claim_id,
-                       new_claim_id=new_claim_id, actor=_whoami())
+        life.supersede(store, old_claim_id=old_claim_id, new_claim_id=new_claim_id, actor=_whoami())
     click.echo(f"superseded {old_claim_id} -> {new_claim_id}")
 
 
@@ -1154,7 +1136,8 @@ def session() -> None:
 
 @session.command("start")
 @click.option(
-    "--agent", default=None,
+    "--agent",
+    default=None,
     help="Agent id (defaults to $VOUCH_AGENT or current user).",
 )
 @click.option("--task", default=None)
@@ -1162,8 +1145,10 @@ def session() -> None:
 def session_start_cmd(agent: str | None, task: str | None, note: str | None) -> None:
     store = _load_store()
     sess = sess_mod.session_start(
-        store, agent=agent or os.environ.get("VOUCH_AGENT") or _whoami(),
-        task=task, note=note,
+        store,
+        agent=agent or os.environ.get("VOUCH_AGENT") or _whoami(),
+        task=task,
+        note=note,
     )
     click.echo(sess.id)
 
@@ -1186,7 +1171,10 @@ def crystallize(session_id: str, no_page: bool) -> None:
     store = _load_store()
     with _cli_errors():
         result = sess_mod.crystallize(
-            store, session_id, approver=_whoami(), write_summary_page=not no_page,
+            store,
+            session_id,
+            approver=_whoami(),
+            write_summary_page=not no_page,
         )
     _emit_json(result)
     n_approved = len(result["approved"])
@@ -1194,8 +1182,7 @@ def crystallize(session_id: str, no_page: bool) -> None:
     total = n_approved + n_failed
     if total > 0 and n_failed == total:
         click.echo(
-            f"error: all {total} proposal(s) failed to approve — "
-            f"crystallize aborted",
+            f"error: all {total} proposal(s) failed to approve — crystallize aborted",
             err=True,
         )
         raise SystemExit(1)
@@ -1214,18 +1201,21 @@ def crystallize(session_id: str, no_page: bool) -> None:
 @click.argument("query")
 @click.option("--limit", "-n", default=10, show_default=True, type=int)
 @click.option("--top-k", default=None, type=int, help="Alias for --limit.")
-@click.option("--semantic/--no-semantic", default=None,
-              help="Force semantic backend (alias for --backend embedding).")
+@click.option(
+    "--semantic/--no-semantic",
+    default=None,
+    help="Force semantic backend (alias for --backend embedding).",
+)
 @click.option(
     "--backend",
     type=click.Choice(["auto", "embedding", "fts5", "substring", "hybrid"]),
-    default="auto", show_default=True,
+    default="auto",
+    show_default=True,
 )
 @click.option("--min-score", default=0.0, show_default=True, type=float)
 @click.option("--rerank/--no-rerank", default=False)
 @click.option("--hyde/--no-hyde", default=False)
 @click.option("--explain/--no-explain", default=False)
-@click.option("--json", "as_json", is_flag=True, help="Emit hits as JSON.")
 def search(
     query: str,
     limit: int,
@@ -1236,11 +1226,11 @@ def search(
     rerank: bool,
     hyde: bool,
     explain: bool,
-    as_json: bool,
 ) -> None:
     """Search the KB."""
     from . import index_db
     from .embeddings.fusion import rrf_fuse
+
     store = _load_store()
     if top_k is not None:
         limit = top_k
@@ -1251,13 +1241,17 @@ def search(
     q = query
     if hyde:
         from .embeddings.hyde import expand_query_template
+
         q = expand_query_template(query)
 
     hits: list[tuple[str, str, str, float]] = []
     used = backend
     if backend in ("auto", "embedding"):
         hits = index_db.search_semantic(
-            store.kb_dir, q, limit=limit, min_score=min_score,
+            store.kb_dir,
+            q,
+            limit=limit,
+            min_score=min_score,
         )
         used = "embedding" if hits else used
     if not hits and backend in ("auto", "fts5"):
@@ -1276,31 +1270,16 @@ def search(
         try:
             from .embeddings.rerank import default_reranker
             from .embeddings.rerank import rerank as do_rerank
-            hits = do_rerank(query=query, hits=hits, reranker=default_reranker(),
-                             top_k=limit)
+
+            hits = do_rerank(query=query, hits=hits, reranker=default_reranker(), top_k=limit)
         except ImportError:
-            click.echo("warning: rerank extras not installed; skipping rerank",
-                       err=True)
+            click.echo("warning: rerank extras not installed; skipping rerank", err=True)
 
-    if as_json:
-        _emit_json({
-            "backend": used,
-            "hits": [
-                {"kind": k, "id": i, "snippet": snip, "score": score,
-                 "backend": used}
-                for k, i, snip, score in hits
-            ],
-        })
-        return
-
-    label = _style(f"({used})", fg="green")
     for k, i, snip, score in hits:
-        loc = _style(f"{k}/{i}", fg="cyan")
         if explain:
-            sc = _style(f"score={score:.4f}", dim=True)
-            _echo(f"{label} {loc}\t{sc}\t{snip}")
+            click.echo(f"[{used}] {k}/{i}\tscore={score:.4f}\t{snip}  ({used})")
         else:
-            _echo(f"{loc}\t{snip}  {label}")
+            click.echo(f"{k}/{i}\t{snip}  ({used})")
 
 
 @cli.command()
@@ -1309,13 +1288,18 @@ def search(
 @click.option("--max-chars", default=None, type=int)
 @click.option("--require-citations", is_flag=True)
 @click.option("--min-items", default=0, type=int)
-def context(task: str, limit: int, max_chars: int | None,
-            require_citations: bool, min_items: int) -> None:
+def context(
+    task: str, limit: int, max_chars: int | None, require_citations: bool, min_items: int
+) -> None:
     """Build a ContextPack ready to inject into an agent prompt."""
     store = _load_store()
     pack = build_context_pack(
-        store, query=task, limit=limit, max_chars=max_chars,
-        min_items=min_items, require_citations=require_citations,
+        store,
+        query=task,
+        limit=limit,
+        max_chars=max_chars,
+        min_items=min_items,
+        require_citations=require_citations,
     )
     _emit_json(pack)
 
@@ -1324,8 +1308,7 @@ def context(task: str, limit: int, max_chars: int | None,
 def index() -> None:
     """Rebuild state.db from durable files."""
     store = _load_store()
-    with _cli_errors():
-        stats = health.rebuild_index(store, on_progress=_progress_cb("indexing"))
+    stats = health.rebuild_index(store)
     click.echo(f"indexed: {stats}")
 
 
@@ -1334,8 +1317,9 @@ def index() -> None:
 
 @cli.command()
 @click.argument("claim_id")
-@click.option("--depth", default=3, show_default=True, type=int,
-              help="How many hops of provenance to expand.")
+@click.option(
+    "--depth", default=3, show_default=True, type=int, help="How many hops of provenance to expand."
+)
 @click.option("--json", "as_json", is_flag=True, help="Emit JSON instead of a tree.")
 def why(claim_id: str, depth: int, as_json: bool) -> None:
     """Explain why a claim exists: cites, session, supersedes chain, approval.
@@ -1376,11 +1360,16 @@ def trace(from_id: str, to_id: str, as_json: bool) -> None:
 
 @cli.command()
 @click.argument("claim_id")
-@click.option("--depth", default=1, show_default=True, type=int,
-              help="How many hops of dependents to expand.")
-@click.option("--if", "if_op", default=None,
-              type=click.Choice([op.value for op in prov_mod.LifecycleOp]),
-              help="Dry-run a lifecycle op and report breakage (exit non-zero if any).")
+@click.option(
+    "--depth", default=1, show_default=True, type=int, help="How many hops of dependents to expand."
+)
+@click.option(
+    "--if",
+    "if_op",
+    default=None,
+    type=click.Choice([op.value for op in prov_mod.LifecycleOp]),
+    help="Dry-run a lifecycle op and report breakage (exit non-zero if any).",
+)
 @click.option("--json", "as_json", is_flag=True, help="Emit JSON instead of a tree.")
 def impact(claim_id: str, depth: int, if_op: str | None, as_json: bool) -> None:
     """Show what depends on a claim, and what breaks if you change it.
@@ -1403,9 +1392,14 @@ def impact(claim_id: str, depth: int, if_op: str | None, as_json: bool) -> None:
 
 @cli.command()
 @click.option("--session", default=None, help="Restrict to one agent run's subgraph.")
-@click.option("--format", "fmt", default="dot", show_default=True,
-              type=click.Choice(["dot", "mermaid"]),
-              help="Output format for the DAG.")
+@click.option(
+    "--format",
+    "fmt",
+    default="dot",
+    show_default=True,
+    type=click.Choice(["dot", "mermaid"]),
+    help="Output format for the DAG.",
+)
 def graph(session: str | None, fmt: str) -> None:
     """Render the provenance DAG as Graphviz dot or a mermaid flowchart."""
     store = _load_store()
@@ -1438,16 +1432,14 @@ def provenance_rebuild(as_json: bool) -> None:
 def dedup(threshold: float, dry_run: bool) -> None:
     """Scan embeddings for cross-artifact near-duplicates."""
     from .embeddings.dedup import scan_all
+
     store = _load_store()
     rows = scan_all(store.kb_dir, threshold=threshold, dry_run=dry_run)
     if not rows:
         click.echo("dedup: no duplicates found")
         return
     for r in rows:
-        click.echo(
-            f"{r['kind']}/{r['id']} ~ {r['kind']}/{r['near_id']}  "
-            f"cos={r['cosine']:.4f}"
-        )
+        click.echo(f"{r['kind']}/{r['id']} ~ {r['kind']}/{r['near_id']}  cos={r['cosine']:.4f}")
 
 
 @cli.group()
@@ -1460,14 +1452,13 @@ def embeddings_stats() -> None:
     """Print model identity, per-kind counts, and cache hit rate."""
     from . import index_db
     from .embeddings.cache import query_cache_stats
+
     store = _load_store()
     meta = index_db.get_embedding_meta(store.kb_dir)
     for k, v in sorted(meta.items()):
         click.echo(f"{k}\t{v}")
     with index_db.open_db(store.kb_dir) as conn:
-        rows = conn.execute(
-            "SELECT kind, COUNT(*) FROM embedding_index GROUP BY kind"
-        ).fetchall()
+        rows = conn.execute("SELECT kind, COUNT(*) FROM embedding_index GROUP BY kind").fetchall()
     for k, n in rows:
         click.echo(f"embedding_count_{k}\t{n}")
     cs = query_cache_stats(store.kb_dir)
@@ -1488,12 +1479,12 @@ def eval_embedding(queries: str, metric: str) -> None:
     from pathlib import Path as _Path
 
     from .embeddings.scorer import evaluate
+
     store = _load_store()
     metrics = tuple(m.strip() for m in metric.split(","))
-    canonical = tuple(
-        "recall@k" if m.startswith("recall@") else m for m in metrics
-    )
+    canonical = tuple("recall@k" if m.startswith("recall@") else m for m in metrics)
     import contextlib
+
     k = 10
     for m in metrics:
         if m.startswith("recall@"):
@@ -1510,22 +1501,28 @@ def eval_embedding(queries: str, metric: str) -> None:
 
 
 @cli.command()
-@click.option("--embeddings/--no-embeddings", default=False,
-              help="Rebuild the embedding index in addition to FTS5.")
-@click.option("--backfill/--no-backfill", default=False,
-              help="Re-encode every artifact under the current model.")
-@click.option("--force/--no-force", default=False,
-              help="Re-encode even if content hash unchanged.")
-@click.option("--model", default=None,
-              help="Adapter name; defaults to the registered default.")
+@click.option(
+    "--embeddings/--no-embeddings",
+    default=False,
+    help="Rebuild the embedding index in addition to FTS5.",
+)
+@click.option(
+    "--backfill/--no-backfill",
+    default=False,
+    help="Re-encode every artifact under the current model.",
+)
+@click.option("--force/--no-force", default=False, help="Re-encode even if content hash unchanged.")
+@click.option("--model", default=None, help="Adapter name; defaults to the registered default.")
 def reindex(embeddings: bool, backfill: bool, force: bool, model: str | None) -> None:
     """Rebuild derived indexes from on-disk artifacts."""
     store = _load_store()
     health.rebuild_index(store)
     if embeddings or backfill:
         from .embeddings.migration import backfill_embeddings
+
         if model:
             from .embeddings import get_embedder
+
             get_embedder(model)
         n = backfill_embeddings(store, force=force)
         click.echo(f"reindex: embeddings backfilled = {n}")
@@ -1545,8 +1542,7 @@ def audit(tail: int, as_json: bool) -> None:
         return
     for e in events:
         click.echo(
-            f"{e.created_at.isoformat()}  {e.event:30s}  by {e.actor}  "
-            f"objects={e.object_ids}"
+            f"{e.created_at.isoformat()}  {e.event:30s}  by {e.actor}  objects={e.object_ids}"
         )
 
 
@@ -1558,16 +1554,14 @@ def audit(tail: int, as_json: bool) -> None:
 def export(out_path: str) -> None:
     """Bundle the durable KB into a portable .tar.gz."""
     store = _load_store()
-    with _cli_errors():
-        manifest = bundle.export(
-            store.kb_dir, dest=Path(out_path), actor=_whoami(),
-            on_progress=_progress_cb("exporting"),
-        )
-    _emit_json({
-        "bundle_id": manifest["bundle_id"],
-        "files": len(manifest["files"]),
-        "out": out_path,
-    })
+    manifest = bundle.export(store.kb_dir, dest=Path(out_path), actor=_whoami())
+    _emit_json(
+        {
+            "bundle_id": manifest["bundle_id"],
+            "files": len(manifest["files"]),
+            "out": out_path,
+        }
+    )
 
 
 @cli.command("export-check")
@@ -1575,10 +1569,14 @@ def export(out_path: str) -> None:
 def export_check_cmd(bundle_path: str) -> None:
     """Verify every file in a bundle matches its manifest hash."""
     r = bundle.export_check(Path(bundle_path))
-    _emit_json({
-        "ok": r.ok, "bundle_id": r.bundle_id,
-        "files_checked": r.files_checked, "issues": r.issues,
-    })
+    _emit_json(
+        {
+            "ok": r.ok,
+            "bundle_id": r.bundle_id,
+            "files_checked": r.files_checked,
+            "issues": r.issues,
+        }
+    )
     sys.exit(0 if r.ok else 1)
 
 
@@ -1588,30 +1586,40 @@ def import_check_cmd(bundle_path: str) -> None:
     """Diff a bundle against the destination KB without writing."""
     store = _load_store()
     r = bundle.import_check(store.kb_dir, Path(bundle_path))
-    _emit_json({
-        "ok": r.ok, "bundle_id": r.bundle_id,
-        "new_files": r.new_files, "conflicts": r.conflicts,
-        "identical_files": len(r.identical), "issues": r.issues,
-    })
+    _emit_json(
+        {
+            "ok": r.ok,
+            "bundle_id": r.bundle_id,
+            "new_files": r.new_files,
+            "conflicts": r.conflicts,
+            "identical_files": len(r.identical),
+            "issues": r.issues,
+        }
+    )
 
 
 @cli.command("import-apply")
 @click.argument("bundle_path", type=click.Path(exists=True, dir_okay=False))
-@click.option("--on-conflict", default="skip", show_default=True,
-              type=click.Choice(["skip", "overwrite", "fail"]))
+@click.option(
+    "--on-conflict",
+    default="skip",
+    show_default=True,
+    type=click.Choice(["skip", "overwrite", "fail"]),
+)
 def import_apply_cmd(bundle_path: str, on_conflict: str) -> None:
     """Apply a bundle. Default policy is skip — never destructive without explicit overwrite."""
     store = _load_store()
     try:
         r = bundle.import_apply(
-            store.kb_dir, Path(bundle_path),
-            on_conflict=on_conflict, actor=_whoami(),
-            on_progress=_progress_cb("importing"),
+            store.kb_dir,
+            Path(bundle_path),
+            on_conflict=on_conflict,
+            actor=_whoami(),
         )
     except RuntimeError as e:
         raise click.ClickException(str(e)) from e
     # Rebuild the index after a bulk import so search picks up new claims.
-    health.rebuild_index(store, on_progress=_progress_cb("indexing"))
+    health.rebuild_index(store)
     _emit_json(r)
 
 
@@ -1632,8 +1640,12 @@ def sync_check_cmd(source_path: str) -> None:
 
 @cli.command("sync-apply")
 @click.argument("source_path", type=click.Path(exists=True))
-@click.option("--on-conflict", default="fail", show_default=True,
-              type=click.Choice(["fail", "skip", "propose"]))
+@click.option(
+    "--on-conflict",
+    default="fail",
+    show_default=True,
+    type=click.Choice(["fail", "skip", "propose"]),
+)
 def sync_apply_cmd(source_path: str, on_conflict: str) -> None:
     """Apply non-conflicting files from another .vouch directory or bundle."""
     store = _load_store()
@@ -1656,11 +1668,11 @@ def sync_apply_cmd(source_path: str, on_conflict: str) -> None:
 @cli.command()
 @click.argument("old_id")
 @click.argument("new_id")
-@click.option("--json", "as_json", is_flag=True, default=False,
-              help="Emit the diff as JSON.")
+@click.option("--json", "as_json", is_flag=True, default=False, help="Emit the diff as JSON.")
 def diff(old_id: str, new_id: str, as_json: bool) -> None:
     """Show what changed between two claim or two page revisions."""
     from .diff import diff_artifacts
+
     store = _load_store()
     with _cli_errors():
         d = diff_artifacts(store, old_id, new_id)
@@ -1684,25 +1696,45 @@ def diff(old_id: str, new_id: str, as_json: bool) -> None:
 
 
 @cli.command()
-@click.option("--transport", default="stdio", show_default=True,
-              type=click.Choice(["stdio", "jsonl", "http"]))
-@click.option("--host", default="127.0.0.1", show_default=True,
-              help="HTTP bind host (transport=http).")
-@click.option("--port", default=None, type=int,
-              help="HTTP bind port (transport=http; default 8731).")
-@click.option("--token", default=None, envvar="VOUCH_HTTP_TOKEN",
-              help="Bearer token for HTTP /rpc + /mcp (or env VOUCH_HTTP_TOKEN). "
-                   "Combine with --config for a multi-token accept-list. "
-                   "Required to bind a non-loopback host.")
-@click.option("--config", "config_path", default=None,
-              type=click.Path(dir_okay=False),
-              help="Path to a config.yaml with a `serve:` section "
-                   "(default: .vouch/config.yaml if present, then ./config.yaml). "
-                   "Supplies `bearer_tokens:` (list) or `bearer_token: env:VAR`.")
-@click.option("--allow-public", is_flag=True,
-              help="Permit binding a non-loopback host (requires at least one token).")
-def serve(transport: str, host: str, port: int | None, token: str | None,
-          config_path: str | None, allow_public: bool) -> None:
+@click.option(
+    "--transport", default="stdio", show_default=True, type=click.Choice(["stdio", "jsonl", "http"])
+)
+@click.option(
+    "--host", default="127.0.0.1", show_default=True, help="HTTP bind host (transport=http)."
+)
+@click.option(
+    "--port", default=None, type=int, help="HTTP bind port (transport=http; default 8731)."
+)
+@click.option(
+    "--token",
+    default=None,
+    envvar="VOUCH_HTTP_TOKEN",
+    help="Bearer token for HTTP /rpc + /mcp (or env VOUCH_HTTP_TOKEN). "
+    "Combine with --config for a multi-token accept-list. "
+    "Required to bind a non-loopback host.",
+)
+@click.option(
+    "--config",
+    "config_path",
+    default=None,
+    type=click.Path(dir_okay=False),
+    help="Path to a config.yaml with a `serve:` section "
+    "(default: .vouch/config.yaml if present, then ./config.yaml). "
+    "Supplies `bearer_tokens:` (list) or `bearer_token: env:VAR`.",
+)
+@click.option(
+    "--allow-public",
+    is_flag=True,
+    help="Permit binding a non-loopback host (requires at least one token).",
+)
+def serve(
+    transport: str,
+    host: str,
+    port: int | None,
+    token: str | None,
+    config_path: str | None,
+    allow_public: bool,
+) -> None:
     """Run the MCP server (stdio), the JSONL tool server, or the HTTP server.
 
     HTTP transport surfaces three protocols against the same kb.* surface:
@@ -1716,16 +1748,21 @@ def serve(transport: str, host: str, port: int | None, token: str | None,
 
     GET /health, /healthz, and /capabilities are always unauthenticated.
     """
+    _load_store()  # fail fast with a clear message if no .vouch/ KB is present
+
     if transport == "stdio":
         from .server import run_stdio
+
         run_stdio()
         return
     if transport == "jsonl":
         from .jsonl_server import run_jsonl
+
         run_jsonl()
         return
 
     from .http_server import DEFAULT_PORT, ServeConfigError, load_serve_config, run_http
+
     bind_port = port if port is not None else DEFAULT_PORT
 
     # Locate config.yaml: explicit --config wins, else look for project-local
@@ -1747,8 +1784,7 @@ def serve(transport: str, host: str, port: int | None, token: str | None,
             break
 
     try:
-        run_http(host, bind_port, token=token, tokens=tokens,
-                 allow_public=allow_public)
+        run_http(host, bind_port, token=token, tokens=tokens, allow_public=allow_public)
     except RuntimeError as e:
         # e.g. the non-loopback bind guard — show a clean Error: line.
         raise click.ClickException(str(e)) from e
@@ -1772,26 +1808,56 @@ def pr_cache_group() -> None:
 
 @pr_cache_group.command("build")
 @click.argument("repo")
-@click.option("--state", type=click.Choice(["merged", "closed", "all"]), default="all",
-              show_default=True, help="Which PR states to fetch.")
-@click.option("--limit", type=int, default=200, show_default=True,
-              help="Max PRs per state to fetch from gh.")
-@click.option("--analyze-closed", is_flag=True,
-              help="Run Claude/Anthropic to summarise WHY each closed-not-merged "
-                   "PR was closed (uses local `claude` CLI if present, else "
-                   "ANTHROPIC_API_KEY). Skipped silently when neither is set.")
-@click.option("--reanalyze", is_flag=True,
-              help="Re-run close-reason analysis even if a previous result is cached.")
-@click.option("--analyzer", type=click.Choice(["auto", "claude-cli", "anthropic-api", "none"]),
-              default="auto", show_default=True,
-              help="Which close-reason analyzer to prefer.")
-@click.option("--no-fetch-files", is_flag=True,
-              help="Skip per-PR file-list fetch (faster, but dedup by file overlap stops working).")
-@click.option("--cache-dir", default=None, type=click.Path(file_okay=False),
-              help="Override cache directory (also env VOUCH_PR_CACHE_DIR).")
-def pr_cache_build(repo: str, state: str, limit: int, analyze_closed: bool,
-                   reanalyze: bool, analyzer: str, no_fetch_files: bool,
-                   cache_dir: str | None) -> None:
+@click.option(
+    "--state",
+    type=click.Choice(["merged", "closed", "all"]),
+    default="all",
+    show_default=True,
+    help="Which PR states to fetch.",
+)
+@click.option(
+    "--limit", type=int, default=200, show_default=True, help="Max PRs per state to fetch from gh."
+)
+@click.option(
+    "--analyze-closed",
+    is_flag=True,
+    help="Run Claude/Anthropic to summarise WHY each closed-not-merged "
+    "PR was closed (uses local `claude` CLI if present, else "
+    "ANTHROPIC_API_KEY). Skipped silently when neither is set.",
+)
+@click.option(
+    "--reanalyze",
+    is_flag=True,
+    help="Re-run close-reason analysis even if a previous result is cached.",
+)
+@click.option(
+    "--analyzer",
+    type=click.Choice(["auto", "claude-cli", "anthropic-api", "none"]),
+    default="auto",
+    show_default=True,
+    help="Which close-reason analyzer to prefer.",
+)
+@click.option(
+    "--no-fetch-files",
+    is_flag=True,
+    help="Skip per-PR file-list fetch (faster, but dedup by file overlap stops working).",
+)
+@click.option(
+    "--cache-dir",
+    default=None,
+    type=click.Path(file_okay=False),
+    help="Override cache directory (also env VOUCH_PR_CACHE_DIR).",
+)
+def pr_cache_build(
+    repo: str,
+    state: str,
+    limit: int,
+    analyze_closed: bool,
+    reanalyze: bool,
+    analyzer: str,
+    no_fetch_files: bool,
+    cache_dir: str | None,
+) -> None:
     """Fetch merged/closed PRs for REPO and upsert into the local cache."""
     with _cli_errors():
         ref = prc_mod.parse_repo(repo)
@@ -1808,31 +1874,48 @@ def pr_cache_build(repo: str, state: str, limit: int, analyze_closed: bool,
             )
         except prc_mod.GHError as e:
             raise click.ClickException(str(e)) from e
-    _emit_json({
-        "repo": ref.slug,
-        "fetched": result.fetched,
-        "new": result.new,
-        "updated": result.updated,
-        "analyzed": result.analyzed,
-        "skipped_analysis": result.skipped_analysis,
-        "cache_path": str(result.path),
-    })
+    _emit_json(
+        {
+            "repo": ref.slug,
+            "fetched": result.fetched,
+            "new": result.new,
+            "updated": result.updated,
+            "analyzed": result.analyzed,
+            "skipped_analysis": result.skipped_analysis,
+            "cache_path": str(result.path),
+        }
+    )
 
 
 @pr_cache_group.command("check")
 @click.argument("repo")
-@click.option("--topic", required=True,
-              help="Short description of the PR you're about to raise (title-like text).")
-@click.option("--files", default="",
-              help="Comma-separated list of paths the planned PR would touch "
-                   "(boosts dedup precision).")
-@click.option("--min-score", default=0.15, show_default=True, type=float,
-              help="Minimum similarity (0..1) for a cached PR to count as a duplicate signal.")
+@click.option(
+    "--topic",
+    required=True,
+    help="Short description of the PR you're about to raise (title-like text).",
+)
+@click.option(
+    "--files",
+    default="",
+    help="Comma-separated list of paths the planned PR would touch (boosts dedup precision).",
+)
+@click.option(
+    "--min-score",
+    default=0.15,
+    show_default=True,
+    type=float,
+    help="Minimum similarity (0..1) for a cached PR to count as a duplicate signal.",
+)
 @click.option("--top-k", default=5, show_default=True, type=int)
-@click.option("--cache-dir", default=None, type=click.Path(file_okay=False),
-              help="Override cache directory (also env VOUCH_PR_CACHE_DIR).")
-def pr_cache_check(repo: str, topic: str, files: str, min_score: float,
-                   top_k: int, cache_dir: str | None) -> None:
+@click.option(
+    "--cache-dir",
+    default=None,
+    type=click.Path(file_okay=False),
+    help="Override cache directory (also env VOUCH_PR_CACHE_DIR).",
+)
+def pr_cache_check(
+    repo: str, topic: str, files: str, min_score: float, top_k: int, cache_dir: str | None
+) -> None:
     """Look up cached PRs similar to TOPIC; warns of likely-duplicate raises."""
     with _cli_errors():
         ref = prc_mod.parse_repo(repo)
@@ -1846,32 +1929,40 @@ def pr_cache_check(repo: str, topic: str, files: str, min_score: float,
             min_score=min_score,
             top_k=top_k,
         )
-    _emit_json({
-        "repo": ref.slug,
-        "cache_path": str(path),
-        "cache_size": len(cache),
-        "topic": topic,
-        "files": file_list,
-        "candidates": [c.as_json() for c in cands],
-        # 0.7 (= 70 % of topic tokens contained in a cached PR's title+body)
-        # is the threshold for "almost certainly the same idea." Below that,
-        # surface as a soft signal the caller should eyeball before raising.
-        "verdict": "likely_duplicate" if any(c.score >= 0.70 for c in cands)
-        else "review_candidates" if cands
-        else "no_match",
-    })
+    _emit_json(
+        {
+            "repo": ref.slug,
+            "cache_path": str(path),
+            "cache_size": len(cache),
+            "topic": topic,
+            "files": file_list,
+            "candidates": [c.as_json() for c in cands],
+            # 0.7 (= 70 % of topic tokens contained in a cached PR's title+body)
+            # is the threshold for "almost certainly the same idea." Below that,
+            # surface as a soft signal the caller should eyeball before raising.
+            "verdict": "likely_duplicate"
+            if any(c.score >= 0.70 for c in cands)
+            else "review_candidates"
+            if cands
+            else "no_match",
+        }
+    )
 
 
 @pr_cache_group.command("show")
 @click.argument("repo")
-@click.option("--state", type=click.Choice(["merged", "closed", "all"]), default="all",
-              show_default=True)
+@click.option(
+    "--state", type=click.Choice(["merged", "closed", "all"]), default="all", show_default=True
+)
 @click.option("--limit", type=int, default=50, show_default=True)
 @click.option("--json", "as_json", is_flag=True, help="Emit JSON instead of a table.")
-@click.option("--cache-dir", default=None, type=click.Path(file_okay=False),
-              help="Override cache directory (also env VOUCH_PR_CACHE_DIR).")
-def pr_cache_show(repo: str, state: str, limit: int, as_json: bool,
-                  cache_dir: str | None) -> None:
+@click.option(
+    "--cache-dir",
+    default=None,
+    type=click.Path(file_okay=False),
+    help="Override cache directory (also env VOUCH_PR_CACHE_DIR).",
+)
+def pr_cache_show(repo: str, state: str, limit: int, as_json: bool, cache_dir: str | None) -> None:
     """List the cached PRs for REPO."""
     with _cli_errors():
         ref = prc_mod.parse_repo(repo)
@@ -1882,22 +1973,27 @@ def pr_cache_show(repo: str, state: str, limit: int, as_json: bool,
         records = [r for r in records if r.state == state]
     records = records[:limit]
     if as_json:
-        _emit_json({
-            "repo": ref.slug,
-            "cache_path": str(path),
-            "count": len(records),
-            "prs": [
-                {
-                    "number": r.number, "state": r.state, "title": r.title,
-                    "url": r.url, "merged_at": r.merged_at, "closed_at": r.closed_at,
-                    "files": r.files, "labels": r.labels,
-                    "close_analysis": (
-                        asdict(r.close_analysis) if r.close_analysis else None
-                    ),
-                }
-                for r in records
-            ],
-        })
+        _emit_json(
+            {
+                "repo": ref.slug,
+                "cache_path": str(path),
+                "count": len(records),
+                "prs": [
+                    {
+                        "number": r.number,
+                        "state": r.state,
+                        "title": r.title,
+                        "url": r.url,
+                        "merged_at": r.merged_at,
+                        "closed_at": r.closed_at,
+                        "files": r.files,
+                        "labels": r.labels,
+                        "close_analysis": (asdict(r.close_analysis) if r.close_analysis else None),
+                    }
+                    for r in records
+                ],
+            }
+        )
         return
     if not records:
         click.echo(f"no cached PRs for {ref.slug} in {path}")
@@ -1916,24 +2012,35 @@ def pr_cache_show(repo: str, state: str, limit: int, as_json: bool,
 # --- install-mcp: drop the right adapter files into a project tree --------
 
 
-@cli.command(name="install-mcp",
-             context_settings={"ignore_unknown_options": False})
+@cli.command(name="install-mcp", context_settings={"ignore_unknown_options": False})
 @click.argument("host", required=False)
-@click.option("--list", "list_hosts", is_flag=True,
-              help="List available hosts and exit.")
-@click.option("--path", default=".", show_default=True,
-              type=click.Path(file_okay=False),
-              help="Target project root.")
-@click.option("--target", "target_alias", default=None,
-              type=click.Path(file_okay=False),
-              help="Alias for --path (per issue #179 spec).")
-@click.option("--tier", default="T4", show_default=True,
-              type=click.Choice(["T1", "T2", "T3", "T4"]),
-              help="Adoption tier: T1 = MCP wire only, "
-                   "T2 = +CLAUDE.md/AGENTS.md, T3 = +slash commands, "
-                   "T4 = +host hooks/settings. Tiers stack.")
-def install_mcp(host: str | None, list_hosts: bool, path: str,
-                target_alias: str | None, tier: str) -> None:
+@click.option("--list", "list_hosts", is_flag=True, help="List available hosts and exit.")
+@click.option(
+    "--path",
+    default=".",
+    show_default=True,
+    type=click.Path(file_okay=False),
+    help="Target project root.",
+)
+@click.option(
+    "--target",
+    "target_alias",
+    default=None,
+    type=click.Path(file_okay=False),
+    help="Alias for --path (per issue #179 spec).",
+)
+@click.option(
+    "--tier",
+    default="T4",
+    show_default=True,
+    type=click.Choice(["T1", "T2", "T3", "T4"]),
+    help="Adoption tier: T1 = MCP wire only, "
+    "T2 = +CLAUDE.md/AGENTS.md, T3 = +slash commands, "
+    "T4 = +host hooks/settings. Tiers stack.",
+)
+def install_mcp(
+    host: str | None, list_hosts: bool, path: str, target_alias: str | None, tier: str
+) -> None:
     """Install vouch into HOST (claude-code, cursor, …) idempotently.
 
     \b
@@ -1984,22 +2091,38 @@ def install_mcp(host: str | None, list_hosts: bool, path: str,
 
 
 @cli.command(name="sync")
-@click.option("--vault", "vault_dir", required=True,
-              type=click.Path(file_okay=False),
-              help="Path to an Obsidian-style markdown vault. "
-                   "Mirroring happens under <vault>/vouch/.")
-@click.option("--direction", default="both", show_default=True,
-              type=click.Choice(["both", "forward", "backward"]),
-              help="forward = vault→KB (file page-edit proposals), "
-                   "backward = KB→vault (mirror approved pages + claim stubs).")
-@click.option("--actor", default="vault-sync", show_default=True,
-              help="Proposer name recorded on every page-edit proposal.")
-@click.option("--watch", is_flag=True,
-              help="Stay alive and re-sync the vault every --poll seconds.")
-@click.option("--poll", default=2.0, show_default=True, type=float,
-              help="Polling interval (seconds) when --watch is set.")
-def sync_cmd(vault_dir: str, direction: str, actor: str,
-             watch: bool, poll: float) -> None:
+@click.option(
+    "--vault",
+    "vault_dir",
+    required=True,
+    type=click.Path(file_okay=False),
+    help="Path to an Obsidian-style markdown vault. Mirroring happens under <vault>/vouch/.",
+)
+@click.option(
+    "--direction",
+    default="both",
+    show_default=True,
+    type=click.Choice(["both", "forward", "backward"]),
+    help="forward = vault→KB (file page-edit proposals), "
+    "backward = KB→vault (mirror approved pages + claim stubs).",
+)
+@click.option(
+    "--actor",
+    default="vault-sync",
+    show_default=True,
+    help="Proposer name recorded on every page-edit proposal.",
+)
+@click.option(
+    "--watch", is_flag=True, help="Stay alive and re-sync the vault every --poll seconds."
+)
+@click.option(
+    "--poll",
+    default=2.0,
+    show_default=True,
+    type=float,
+    help="Polling interval (seconds) when --watch is set.",
+)
+def sync_cmd(vault_dir: str, direction: str, actor: str, watch: bool, poll: float) -> None:
     """Sync the KB with an Obsidian-compatible markdown vault (VEP-style #181).
 
     \b
@@ -2027,13 +2150,19 @@ def sync_cmd(vault_dir: str, direction: str, actor: str,
                 f"(direction={direction}, actor={actor}); Ctrl-C to stop."
             )
             ticks = vault_sync_mod.watch_vault(
-                store, vault_path,
-                direction=direction, actor=actor, poll_interval=poll,
+                store,
+                vault_path,
+                direction=direction,
+                actor=actor,
+                poll_interval=poll,
             )
             click.echo(f"Stopped after {ticks} tick(s).")
             return
         result = vault_sync_mod.sync_vault(
-            store, vault_path, direction=direction, actor=actor,
+            store,
+            vault_path,
+            direction=direction,
+            actor=actor,
         )
     except vault_sync_mod.VaultSyncError as e:
         raise click.ClickException(str(e)) from e
@@ -2073,6 +2202,7 @@ def _resolve_auth_token(auth: str | None) -> str | None:
         return None
     if auth == "generate":
         import secrets
+
         token = secrets.token_urlsafe(24)
         click.echo(f"Generated review token: {token}")
         return token
@@ -2087,26 +2217,53 @@ def _resolve_auth_token(auth: str | None) -> str | None:
 
 
 @cli.command(name="review-ui")
-@click.option("--bind", "bind", default="127.0.0.1:7780", show_default=True,
-              help="host:port to bind. A non-loopback host (e.g. 0.0.0.0) "
-                   "requires --auth so the approve surface isn't exposed "
-                   "unauthenticated.")
-@click.option("--auth", default=None,
-              help="Bearer-token mode: a literal token, 'generate' (mint a "
-                   "random one and print it), or 'env' (read "
-                   "VOUCH_REVIEW_TOKEN). Required for non-loopback binds.")
-@click.option("--reviewer", "reviewer", default="web-reviewer", show_default=True,
-              help="Identity recorded in the audit log for token-authed "
-                   "approve/reject decisions.")
-@click.option("--page-size", default=None, type=int,
-              help="Queue page size (server-side pagination).")
-@click.option("--kb", "kb_root", default=None,
-              type=click.Path(exists=True, file_okay=False),
-              help="KB root (defaults to the nearest .vouch/ above cwd).")
-@click.option("--open-browser/--no-open-browser", default=True, show_default=True,
-              help="Open the browser to the queue on startup.")
-def review_ui(bind: str, auth: str | None, reviewer: str, page_size: int | None,
-              kb_root: str | None, open_browser: bool) -> None:
+@click.option(
+    "--bind",
+    "bind",
+    default="127.0.0.1:7780",
+    show_default=True,
+    help="host:port to bind. A non-loopback host (e.g. 0.0.0.0) "
+    "requires --auth so the approve surface isn't exposed "
+    "unauthenticated.",
+)
+@click.option(
+    "--auth",
+    default=None,
+    help="Bearer-token mode: a literal token, 'generate' (mint a "
+    "random one and print it), or 'env' (read "
+    "VOUCH_REVIEW_TOKEN). Required for non-loopback binds.",
+)
+@click.option(
+    "--reviewer",
+    "reviewer",
+    default="web-reviewer",
+    show_default=True,
+    help="Identity recorded in the audit log for token-authed approve/reject decisions.",
+)
+@click.option(
+    "--page-size", default=None, type=int, help="Queue page size (server-side pagination)."
+)
+@click.option(
+    "--kb",
+    "kb_root",
+    default=None,
+    type=click.Path(exists=True, file_okay=False),
+    help="KB root (defaults to the nearest .vouch/ above cwd).",
+)
+@click.option(
+    "--open-browser/--no-open-browser",
+    default=True,
+    show_default=True,
+    help="Open the browser to the queue on startup.",
+)
+def review_ui(
+    bind: str,
+    auth: str | None,
+    reviewer: str,
+    page_size: int | None,
+    kb_root: str | None,
+    open_browser: bool,
+) -> None:
     """Run the browser-based review console (issue #194).
 
     \b
@@ -2118,9 +2275,7 @@ def review_ui(bind: str, auth: str | None, reviewer: str, page_size: int | None,
       VOUCH_REVIEW_TOKEN=… vouch review-ui --bind 0.0.0.0:7780 --auth env
     """
     if ":" not in bind:
-        raise click.ClickException(
-            f"--bind must be host:port (got {bind!r})"
-        )
+        raise click.ClickException(f"--bind must be host:port (got {bind!r})")
     host, _, port_str = bind.rpartition(":")
     try:
         port = int(port_str)
@@ -2156,8 +2311,7 @@ def review_ui(bind: str, auth: str | None, reviewer: str, page_size: int | None,
         import uvicorn
     except ImportError as e:
         raise click.ClickException(
-            "vouch review-ui needs the [web] extra. "
-            "Install with: pip install 'vouch-kb[web]'"
+            "vouch review-ui needs the [web] extra. Install with: pip install 'vouch-kb[web]'"
         ) from e
 
     auth_note = " (Bearer auth on)" if token else ""
@@ -2168,6 +2322,7 @@ def review_ui(bind: str, auth: str | None, reviewer: str, page_size: int | None,
         # is on, hand the browser the token once via ?token= so it can stash it.
         import threading
         import webbrowser
+
         suffix = f"?token={token}" if token else ""
         url = f"http://{host}:{port}/{suffix}"
         click.echo(f"vouch review-ui running at http://{host}:{port}/{auth_note}")
