@@ -22,6 +22,7 @@ from . import __version__, bundle, health
 from . import audit as audit_mod
 from . import lifecycle as life
 from . import sessions as sess_mod
+from . import synthesize as synth
 from . import verify as verify_mod
 from .capabilities import capabilities as build_caps
 from .context import build_context_pack
@@ -580,6 +581,20 @@ def context(task: str, limit: int, max_chars: int | None,
         min_items=min_items, require_citations=require_citations,
     )
     _emit_json(pack)
+
+
+@cli.command()
+@click.argument("query")
+@click.option("--depth", default=3, show_default=True, type=int)
+@click.option("--max-chars", default=4000, show_default=True, type=int)
+def synthesize(query: str, depth: int, max_chars: int) -> None:
+    """Answer a query from approved claims only, with inline citations."""
+    store = _load_store()
+    with _cli_errors():
+        result = synth.synthesize(
+            store, query=query, depth=depth, max_chars=max_chars,
+        )
+    _emit_json(result)
 
 
 @cli.command()

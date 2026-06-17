@@ -47,6 +47,7 @@ from .storage import (
     KBStore,
     discover_root,
 )
+from .synthesize import synthesize
 
 
 def _store() -> KBStore:
@@ -136,6 +137,16 @@ def _h_context(p: dict) -> dict:
         require_citations=bool(p.get("require_citations", False)),
         fail_on_warnings=bool(p.get("fail_on_warnings", False)),
         fail_on_budget_truncation=bool(p.get("fail_on_budget_truncation", False)),
+    )
+
+
+def _h_synthesize(p: dict) -> dict:
+    return synthesize(
+        _store(),
+        query=p["query"],
+        depth=int(p.get("depth", 3)),
+        max_chars=int(p.get("max_chars", 4000)),
+        llm=bool(p.get("llm", False)),
     )
 
 
@@ -473,6 +484,7 @@ HANDLERS: dict[str, Callable[[dict], Any]] = {
     "kb.status": _h_status,
     "kb.search": _h_search,
     "kb.context": _h_context,
+    "kb.synthesize": _h_synthesize,
     "kb.read_page": _h_read_page,
     "kb.read_claim": _h_read_claim,
     "kb.read_entity": _h_read_entity,

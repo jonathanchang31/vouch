@@ -6,6 +6,15 @@ All notable changes to vouch are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+- `kb.synthesize` — answer-mode retrieval over the review-gated KB. Answers a
+  query in prose from approved claims only, with an inline `[claim_id]`
+  citation behind every sentence, an explicit `gaps` block listing query
+  topics no approved claim covered, and a `synthesis_confidence` grade derived
+  from the cited claims' lifecycle status. Deterministic in v1 (no LLM in the
+  loop). Exposed across the CLI (`vouch synthesize`), MCP (`kb_synthesize`),
+  and JSONL (`kb.synthesize`) surfaces (#222).
+
 ## [0.1.0] — 2026-05-26
 
 ### Packaging

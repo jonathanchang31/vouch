@@ -39,6 +39,7 @@ from .storage import (
     KBStore,
     discover_root,
 )
+from .synthesize import synthesize
 
 mcp = FastMCP("vouch")
 
@@ -156,6 +157,21 @@ def kb_context(
         _store(), query=task, limit=limit, max_chars=max_chars,
         min_items=min_items, require_citations=require_citations,
     )
+
+
+@mcp.tool()
+def kb_synthesize(
+    query: str,
+    depth: int = 3,
+    max_chars: int = 4000,
+) -> dict[str, Any]:
+    """Answer a query from approved claims only, with inline `[claim_id]`
+    citations, an explicit gaps block, and a synthesis_confidence grade.
+
+    Unlike `kb_context` (a ranked list), this returns prose where every
+    sentence is traceable to an approved claim.
+    """
+    return synthesize(_store(), query=query, depth=depth, max_chars=max_chars)
 
 
 @mcp.tool()

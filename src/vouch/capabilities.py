@@ -18,6 +18,7 @@ METHODS = [
     "kb.status",
     "kb.search",
     "kb.context",
+    "kb.synthesize",
     "kb.read_page",
     "kb.read_claim",
     "kb.read_entity",
