@@ -28,6 +28,7 @@ from typing import Any
 
 from . import audit, bundle, health, volunteer_context
 from . import lifecycle as life
+from . import salience as salience_mod
 from . import sessions as sess_mod
 from . import verify as verify_mod
 from .capabilities import capabilities as build_caps
@@ -157,11 +158,25 @@ def _h_search(p: dict) -> dict:
     }
 
 
+def _load_cfg(store: KBStore) -> dict:
+    try:
+        loaded = yaml.safe_load((store.kb_dir / "config.yaml").read_text())
+    except Exception:
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
+
 
 def _h_context(p: dict) -> dict:
-    return build_context_pack(  # type: ignore[return-value]
-        _store(),
-        query=p["task"],
+    store = _store()
+    query = p["task"]
+    cfg = _load_cfg(store)
+    session_id = p.get("session_id")
+    if session_id:
+        _, window, _ = salience_mod.reflex_cfg(cfg)
+        salience_mod.record_query(session_id, query, window=window)
+    result: dict = build_context_pack(  # type: ignore[assignment]
+        store,
+        query=query,
         limit=int(p.get("limit", 10)),
         max_chars=int(p["max_chars"]) if p.get("max_chars") is not None else None,
         min_items=int(p.get("min_items", 0)),
@@ -171,6 +186,7 @@ def _h_context(p: dict) -> dict:
         project=p.get("project"),
         agent=p.get("agent"),
     )
+    return salience_mod.attach_salience(result, store, session_id, cfg)
 
 
 def _h_read_page(p: dict) -> dict:
