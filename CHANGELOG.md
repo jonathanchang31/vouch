@@ -6,6 +6,14 @@ All notable changes to vouch are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+- `vouch eval recall <queries.jsonl>` — score `kb.context` retrieval against a
+  labeled query set with pure-Python P@k / R@k / MRR / nDCG, compare against a
+  committed `eval/baseline.json`, and fail CI on a P@5 regression beyond
+  tolerance (default 5%). Ships a starter labeled set, a reproducible fixture
+  KB under `eval/fixture-kb/`, and an `eval` workflow gating retrieval changes
+  (#226).
+
 ## [0.1.0] — 2026-05-26
 
 ### Packaging

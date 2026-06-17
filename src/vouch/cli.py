@@ -667,6 +667,28 @@ def eval_embedding(queries: str, metric: str) -> None:
         click.echo(f"{m_name}\t{v:.4f}")
 
 
+@eval_group.command("recall")
+@click.argument("queries", type=click.Path(exists=True, dir_okay=False))
+@click.option("--k", default=5, show_default=True, type=int)
+@click.option("--baseline", default=None, type=click.Path(exists=True, dir_okay=False),
+              help="Baseline report JSON; fail on a P@k regression beyond tolerance.")
+@click.option("--max-regression", default=0.05, show_default=True, type=float)
+def eval_recall(queries: str, k: int, baseline: str | None,
+                max_regression: float) -> None:
+    """Score kb.context retrieval against a labeled query set (P@k/R@k/MRR/nDCG)."""
+    from .eval.recall import compare_baseline, run_recall
+    store = _load_store()
+    with _cli_errors():
+        report = run_recall(store, queries, k=k)
+    click.echo(json.dumps(report, indent=2))
+    if baseline is not None:
+        base = json.loads(Path(baseline).read_text(encoding="utf-8"))
+        ok, message = compare_baseline(report, base, max_regression=max_regression)
+        click.echo(message, err=True)
+        if not ok:
+            raise click.ClickException(message)
+
+
 @cli.command()
 @click.option("--embeddings/--no-embeddings", default=False,
               help="Rebuild the embedding index in addition to FTS5.")
