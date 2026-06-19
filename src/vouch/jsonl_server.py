@@ -32,6 +32,7 @@ from . import audit, bundle, health, volunteer_context
 from . import lifecycle as life
 from . import salience as salience_mod
 from . import sessions as sess_mod
+from . import trust as trust_mod
 from . import verify as verify_mod
 from .capabilities import capabilities as build_caps
 from .context import build_context_pack
@@ -700,7 +701,11 @@ def handle_request(envelope: dict) -> dict:
         }
     try:
         result = HANDLERS[method](params)
-        return {"id": req_id, "ok": True, "result": result}
+        return {
+            "id": req_id,
+            "ok": True,
+            "result": trust_mod.finish_kb_result(result),
+        }
     except KeyError as e:
         return {
             "id": req_id, "ok": False,
@@ -725,6 +730,7 @@ def handle_request(envelope: dict) -> dict:
 def run_jsonl(stdin=None, stdout=None) -> None:
     """Read one request per line, write one response per line."""
     configure_logging()
+    trust_mod.set_stdio_default(trust_mod.JSONL_STDIO)
     stdin = stdin or sys.stdin
     stdout = stdout or sys.stdout
     for line in stdin:

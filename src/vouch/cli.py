@@ -32,6 +32,7 @@ from . import sessions as sess_mod
 from . import stats as stats_mod
 from . import sync as sync_mod
 from . import synthesize as synth
+from . import trust as trust_mod
 from . import vault_sync as vault_sync_mod
 from . import verify as verify_mod
 from .capabilities import capabilities as build_caps
@@ -103,6 +104,9 @@ def _whoami() -> str:
 
 
 def _emit_json(obj) -> None:
+    with trust_mod.trust_context(trust_mod.CLI):
+        if isinstance(obj, dict):
+            obj = trust_mod.attach_trust(obj)
     click.echo(json.dumps(obj, indent=2, default=str, sort_keys=True))
 
 

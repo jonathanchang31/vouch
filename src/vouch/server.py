@@ -23,6 +23,7 @@ from . import audit, bundle, health, volunteer_context
 from . import lifecycle as life
 from . import salience as salience_mod
 from . import sessions as sess_mod
+from . import trust as trust_mod
 from . import verify as verify_mod
 from .capabilities import capabilities as build_caps
 from .context import build_context_pack
@@ -863,7 +864,11 @@ def _current_model_name() -> str:
         return ""
 
 
+trust_mod.install_mcp_trust_wrappers(mcp)
+
+
 def run_stdio() -> None:
     """Entry point used by `vouch serve`."""
     configure_logging()
+    trust_mod.set_stdio_default(trust_mod.MCP_STDIO)
     mcp.run()
