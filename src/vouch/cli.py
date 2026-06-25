@@ -768,6 +768,63 @@ def import_apply_cmd(bundle_path: str, on_conflict: str) -> None:
     _emit_json(r)
 
 
+# --- auto-pr: open N mergeable PRs against any github repo -----------------
+
+
+@cli.command(name="auto-pr")
+@click.argument("repo_url")
+@click.option("--workspace", required=True, type=click.Path(),
+              help="directory holding (or to hold) the clone/fork.")
+@click.option("--count", default=1, show_default=True, type=int,
+              help="how many PRs to attempt.")
+@click.option("--claude-effort", default="high", show_default=True,
+              type=click.Choice(["low", "medium", "high", "max"]))
+@click.option("--codex-effort", default="high", show_default=True,
+              type=click.Choice(["low", "medium", "high", "max"]))
+@click.option("--issue-label", "issue_labels", multiple=True,
+              help="restrict the open-issue source to these labels (repeatable).")
+@click.option("--fork-owner", default=None,
+              help="fork owner login (default: the authenticated gh user).")
+@click.option("--max-revise", default=2, show_default=True, type=int,
+              help="max fixer<->verifier revise rounds per item.")
+@click.option("--dry-run", is_flag=True,
+              help="run every stage except git push / gh pr create.")
+@click.option("--json", "as_json", is_flag=True)
+def auto_pr_cmd(repo_url: str, workspace: str, count: int, claude_effort: str,
+                codex_effort: str, issue_labels: tuple[str, ...],
+                fork_owner: str | None, max_revise: int, dry_run: bool,
+                as_json: bool) -> None:
+    """Open N mergeable PRs against REPO_URL, cross-verified by claude + codex.
+
+    Sources open issues first (then agent-discovered improvements), bootstraps
+    a contribution skill from the repo's merged PRs when it ships no guidance,
+    and opens a PR only when the repo's own test gate is green and the
+    reviewing engine signs off. A sibling tool — it never writes to the KB.
+    """
+    from . import auto_pr as ap_mod
+    results = ap_mod.run_auto_pr(
+        repo_url, workspace, count, claude_effort, codex_effort,
+        labels=tuple(issue_labels), fork_owner=fork_owner,
+        max_revise=max_revise, dry_run=dry_run,
+    )
+    if as_json:
+        _emit_json([
+            {"status": r.status, "url": r.url, "fixer": r.fixer,
+             "verifier": r.verifier, "title": r.item.title,
+             "reason": r.reason, "rounds": r.rounds}
+            for r in results
+        ])
+        return
+    opened = 0
+    for r in results:
+        if r.status == "opened":
+            opened += 1
+            click.echo(r.url or "(dry-run: would open)")
+        else:
+            click.echo(f"skipped: {r.item.title} — {r.reason}", err=True)
+    click.echo(f"opened {opened}/{len(results)} PRs", err=True)
+
+
 # --- serve ----------------------------------------------------------------
 
 
