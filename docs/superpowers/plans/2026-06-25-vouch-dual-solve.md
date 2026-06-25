@@ -13,6 +13,7 @@
 - This is a **CLI-only sibling tool**, exactly like `auto-pr`. It is NOT a `kb.*` method: do **not** add it to `server.py`, `jsonl_server.py`, `capabilities.py`, or `openclaw.plugin.json`. `test_capabilities` does not apply.
 - **Review gate is sacred.** The only KB writes are `store.put_source(...)` (source intake — ungated by design) and `proposals.propose_claim(...)` (lands in `proposed/`). Never call `proposals.approve` or any direct durable-claim write. Nothing is auto-approved.
 - **Reuse, don't re-extract.** Import `Engine, Runner, SubprocessRunner, slugify` from `vouch.auto_pr`. Do NOT move them into a new `_engines.py` — `tests/test_auto_pr.py` monkeypatches `ap.shutil.which` and depends on those symbols living in `auto_pr`, so extraction is disruptive and out of scope.
+- **Import where first used — do NOT front-load.** ruff `F401` (unused import) is part of the gate and is enforced at *every* commit, not just the final one. Each task adds `from .X import Y` (and `import json` / `import tempfile`) only when its own code references the symbol; the task's **Interfaces → Consumes** block names the source module for every symbol it needs. Keep `__all__` isort-sorted (ruff `RUF022`) when a task adds a public name. Earlier tasks therefore import less than the full surface: e.g. `build_context_pack`/`ContextPack` arrive with Task 3, `Engine`/`Runner`/`slugify` with Task 4, `SourceType`/`propose_claim` with Task 5, `tempfile`/`SubprocessRunner` with Task 6.
 - **Conventional commits**, lowercase summary ≤72 chars, lowercase body. **No `Co-Authored-By` trailer.** Types: `feat | fix | refactor | test | docs | chore`.
 - **Stage by name** in every commit step — never `git add -A` / `git add .` (it leaks `.claude/`, `web/`, local scratch).
 - **CI gate** that must stay green: `.venv/bin/pytest tests/ -q --ignore=tests/embeddings && .venv/bin/mypy src && .venv/bin/ruff check src tests` (equivalent to `make check`).
@@ -110,20 +111,12 @@ is preserved: nothing is auto-approved.
 """
 from __future__ import annotations
 
-import json
 import re
 import shutil
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-from .auto_pr import Engine, Runner, SubprocessRunner, slugify
-from .context import build_context_pack
-from .models import ContextPack, SourceType
-from .proposals import propose_claim
-from .storage import KBStore
-
-__all__ = ["Issue", "Candidate", "parse_issue_ref"]
+__all__ = ["Candidate", "Issue", "parse_issue_ref"]
 
 
 def _require_engines() -> None:
@@ -1034,7 +1027,7 @@ Expected: PASS — the dual-solve suite is green and `auto_pr` is unaffected (no
 - [ ] **Step 3: Run the whole CI gate**
 
 Run: `.venv/bin/pytest tests/ -q --ignore=tests/embeddings && .venv/bin/mypy src && .venv/bin/ruff check src tests`
-Expected: all green. If `ruff` flags an unused import in `dual_solve.py`, remove it; if `mypy` flags `build_context_pack`'s `ContextPack | dict` union, confirm the `isinstance(pack, ContextPack)` guard in `ground_prompt` is present (it narrows the type).
+Expected: all green. Imports were added per-task as symbols came into use (see Global Constraints), so `ruff` should report no `F401`; if it flags a leftover unused import in `dual_solve.py`, the task that was meant to use it skipped it — investigate rather than blindly deleting. If `mypy` flags `build_context_pack`'s `ContextPack | dict` union, confirm the `isinstance(pack, ContextPack)` guard in `ground_prompt` is present (it narrows the type).
 
 - [ ] **Step 4: Commit**
 
