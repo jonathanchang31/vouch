@@ -110,3 +110,53 @@ def test_build_prompt_includes_issue_and_grounding():
     assert "Fix the lexer" in p and "it crashes" in p
     assert "[c1] relevant claim" in p
     assert "smallest correct change" in p
+
+
+def _issue():
+    return ds.Issue(title="Fix bug", body="b", number=3, url="u")
+
+
+def test_run_candidate_success_commits_and_captures_sha(tmp_path):
+    root, wt = tmp_path, tmp_path / "wt-claude"
+    fr = FakeRunner([
+        (["git", "-C", str(wt), "diff", "HEAD"], ap.RunResult(0, "patch text", "")),
+        (["git", "-C", str(wt), "rev-parse", "HEAD"], ap.RunResult(0, "abc123\n", "")),
+        (["claude"], ap.RunResult(0, '{"result": "done"}', "")),
+    ])
+    eng = ds.Engine("claude", "high", fr)
+    cand = ds.run_candidate(eng, _issue(), "do it", root, "HEAD", wt, fr)
+    assert cand.ok is True
+    assert cand.engine == "claude"
+    assert cand.branch == "vouch-dual/3-fix-bug-claude"
+    assert cand.diff == "patch text" and cand.sha == "abc123"
+    assert any(c[:5] == ["git", "-C", str(root), "worktree", "add"] for c in fr.calls)
+    assert any(c[:4] == ["git", "-C", str(wt), "commit"] for c in fr.calls)
+
+
+def test_run_candidate_worktree_add_failure(tmp_path):
+    root, wt = tmp_path, tmp_path / "wt"
+    fr = FakeRunner([(["git", "-C", str(root), "worktree", "add"],
+                      ap.RunResult(1, "", "branch exists"))])
+    cand = ds.run_candidate(ds.Engine("codex", "high", fr), _issue(),
+                            "p", root, "HEAD", wt, fr)
+    assert cand.ok is False and "worktree add failed" in (cand.error or "")
+
+
+def test_run_candidate_empty_diff(tmp_path):
+    root, wt = tmp_path, tmp_path / "wt"
+    fr = FakeRunner([(["git", "-C", str(wt), "diff", "HEAD"],
+                      ap.RunResult(0, "   \n", ""))])
+    cand = ds.run_candidate(ds.Engine("codex", "high", fr), _issue(),
+                            "p", root, "HEAD", wt, fr)
+    assert cand.ok is False and "no diff" in (cand.error or "")
+    assert not any(c[:4] == ["git", "-C", str(wt), "commit"] for c in fr.calls)
+
+
+def test_run_candidate_dry_run_skips_commit(tmp_path):
+    root, wt = tmp_path, tmp_path / "wt"
+    fr = FakeRunner([(["git", "-C", str(wt), "diff", "HEAD"],
+                      ap.RunResult(0, "patch", ""))])
+    cand = ds.run_candidate(ds.Engine("codex", "high", fr), _issue(),
+                            "p", root, "HEAD", wt, fr, commit=False)
+    assert cand.ok is True and cand.diff == "patch" and cand.sha == ""
+    assert not any(c[:4] == ["git", "-C", str(wt), "commit"] for c in fr.calls)

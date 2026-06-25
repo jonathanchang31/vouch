@@ -14,7 +14,7 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-from .auto_pr import Runner
+from .auto_pr import Engine, Runner, slugify
 from .context import build_context_pack
 from .models import ContextPack
 from .storage import KBStore
@@ -27,6 +27,7 @@ __all__ = [
     "ground_prompt",
     "parse_issue_ref",
     "repo_root",
+    "run_candidate",
 ]
 
 
@@ -154,3 +155,42 @@ def build_prompt(issue: Issue, grounding: str) -> str:
         body=issue.body or "(no description)",
         grounding=grounding,
     )
+
+
+def run_candidate(engine: Engine, issue: Issue, prompt: str, root: Path,
+                  base: str, worktree: Path, runner: Runner, *,
+                  commit: bool = True) -> Candidate:
+    slug = slugify(issue.title)
+    num = issue.number if issue.number is not None else "x"
+    branch = f"vouch-dual/{num}-{slug}-{engine.name}"
+    cand = Candidate(engine=engine.name, branch=branch, worktree=worktree)
+
+    add = runner.run(["git", "-C", str(root), "worktree", "add", "-b", branch,
+                      str(worktree), base])
+    if add.code != 0:
+        cand.error = f"worktree add failed: {add.stderr.strip()[:200]}"
+        return cand
+
+    engine.fix(cwd=str(worktree), prompt=prompt)
+
+    # intent-to-add so a fix that only *creates* files still shows in `diff HEAD`.
+    runner.run(["git", "-C", str(worktree), "add", "-A", "-N"])
+    diff = runner.run(["git", "-C", str(worktree), "diff", "HEAD"]).stdout
+    if not diff.strip():
+        cand.error = "engine produced no diff"
+        return cand
+    cand.diff = diff
+
+    if commit:
+        runner.run(["git", "-C", str(worktree), "add", "-A"])
+        title = f"resolve #{issue.number}: {issue.title}" if issue.number \
+            else f"resolve: {issue.title}"
+        c = runner.run(["git", "-C", str(worktree), "commit", "-m", title])
+        if c.code != 0:
+            cand.error = f"commit failed: {c.stderr.strip()[:200]}"
+            return cand
+        cand.sha = runner.run(
+            ["git", "-C", str(worktree), "rev-parse", "HEAD"]).stdout.strip()
+
+    cand.ok = True
+    return cand
