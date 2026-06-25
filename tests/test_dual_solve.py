@@ -280,3 +280,75 @@ def test_finalize_no_record_proposes_nothing(tmp_path, monkeypatch):
     ids = ds.finalize(store, tmp_path, ds.Issue("t", "b", 1), win, {}, [win],
                       "", FakeRunner(), record=False, proposed_by="x")
     assert ids == [] and called["n"] == 0
+
+
+def test_cli_dual_solve_choose_claude(monkeypatch, tmp_path):
+    from click.testing import CliRunner
+
+    from vouch.cli import cli
+
+    issue = ds.Issue("Fix bug", "b", number=4, url="u")
+    c_claude = ds.Candidate("claude", "vouch-dual/4-fix-bug-claude",
+                            tmp_path / "a", diff="DIFF-CLAUDE", sha="s1", ok=True)
+    c_codex = ds.Candidate("codex", "vouch-dual/4-fix-bug-codex",
+                           tmp_path / "b", diff="DIFF-CODEX", sha="s2", ok=True)
+    monkeypatch.setattr("vouch.dual_solve._require_engines", lambda: None)
+    monkeypatch.setattr("vouch.dual_solve.repo_root", lambda r, c: tmp_path)
+    monkeypatch.setattr("vouch.dual_solve.prepare",
+                        lambda *a, **k: (issue, [c_claude, c_codex], {}))
+    captured = {}
+    monkeypatch.setattr(
+        "vouch.dual_solve.finalize",
+        lambda store, root, iss, chosen, engines, cands, reason, runner, *, record, proposed_by:
+            captured.update(chosen=chosen, record=record, reason=reason) or ["prop-1"])
+    monkeypatch.setattr("vouch.cli._load_store", lambda *a, **k: object())
+
+    # input: choose claude, then a one-line reason for the decision claim.
+    r = CliRunner().invoke(cli, ["dual-solve", "o/n#4"], input="c\ncleaner\n")
+    assert r.exit_code == 0, r.output
+    assert "DIFF-CLAUDE" in r.output and "DIFF-CODEX" in r.output
+    assert captured["chosen"].engine == "claude"
+    assert captured["record"] is True
+    assert "prop-1" in r.output
+
+
+def test_cli_dual_solve_json_is_noninteractive(monkeypatch, tmp_path):
+    from click.testing import CliRunner
+
+    from vouch.cli import cli
+
+    issue = ds.Issue("t", "b", number=1)
+    cands = [ds.Candidate("claude", "b1", tmp_path / "a", diff="DA", ok=True),
+             ds.Candidate("codex", "b2", tmp_path / "b", diff="DB", ok=True)]
+    monkeypatch.setattr("vouch.dual_solve._require_engines", lambda: None)
+    monkeypatch.setattr("vouch.dual_solve.repo_root", lambda r, c: tmp_path)
+    monkeypatch.setattr("vouch.dual_solve.prepare",
+                        lambda *a, **k: (issue, cands, {}))
+    monkeypatch.setattr("vouch.cli._load_store", lambda *a, **k: object())
+    finalize_called = {"n": 0}
+    monkeypatch.setattr("vouch.dual_solve.finalize",
+                        lambda *a, **k: finalize_called.__setitem__("n", 1))
+
+    r = CliRunner().invoke(cli, ["dual-solve", "o/n#1", "--json"])
+    assert r.exit_code == 0, r.output
+    assert '"engine"' in r.output and "DA" in r.output and "DB" in r.output
+    # --json must not prompt and must not finalize/record.
+    assert finalize_called["n"] == 0
+
+
+def test_cli_dual_solve_aborts_when_both_fail(monkeypatch, tmp_path):
+    from click.testing import CliRunner
+
+    from vouch.cli import cli
+
+    issue = ds.Issue("t", "b", number=1)
+    cands = [ds.Candidate("claude", "b1", tmp_path / "a", ok=False, error="boom"),
+             ds.Candidate("codex", "b2", tmp_path / "b", ok=False, error="boom")]
+    monkeypatch.setattr("vouch.dual_solve._require_engines", lambda: None)
+    monkeypatch.setattr("vouch.dual_solve.repo_root", lambda r, c: tmp_path)
+    monkeypatch.setattr("vouch.dual_solve.prepare",
+                        lambda *a, **k: (issue, cands, {}))
+    monkeypatch.setattr("vouch.cli._load_store", lambda *a, **k: object())
+    r = CliRunner().invoke(cli, ["dual-solve", "o/n#1"])
+    assert r.exit_code != 0
+    assert "both engines failed" in r.output.lower()
