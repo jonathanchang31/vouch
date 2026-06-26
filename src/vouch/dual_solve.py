@@ -29,6 +29,7 @@ __all__ = [
     "Candidate",
     "Issue",
     "build_prompt",
+    "changed_files",
     "cleanup",
     "fetch_issue",
     "finalize",
@@ -74,6 +75,26 @@ class Candidate:
     sha: str = ""
     ok: bool = False
     error: str | None = None
+
+
+def changed_files(diff: str) -> list[str]:
+    """Return changed paths in display order from a unified git diff."""
+    files: list[str] = []
+    seen: set[str] = set()
+    for line in diff.splitlines():
+        if not line.startswith("diff --git "):
+            continue
+        parts = line.split()
+        if len(parts) < 4:
+            continue
+        path = parts[3]
+        if path.startswith("b/"):
+            path = path[2:]
+        if path == "/dev/null" or path in seen:
+            continue
+        seen.add(path)
+        files.append(path)
+    return files
 
 
 def parse_issue_ref(ref: str) -> tuple[str | None, str]:

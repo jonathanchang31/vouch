@@ -19,11 +19,14 @@ All notable changes to vouch are documented here. Format follows
   with elapsed time and diff size) reports progress to stderr while it works.
 - `vouch dual-solve --sandbox` and
   `vouch review-ui --dual-solve-sandbox` — run Claude Code and Codex inside a
-  Docker image (default `amika/coder:latest`) while leaving git/GitHub commands
+  Docker image (default `vouch/coder:latest`) while leaving git/GitHub commands
   on the host. The sandbox runner mounts only each candidate worktree plus a
   temporary copied home containing known Claude/Codex credential files, so agent
   writes stay in the throwaway dual-solve branches and host credential files are
   not modified.
+- dual-solve JSON, review-ui job, and choose responses now include
+  `changed_files` for each candidate and the kept branch, so desktop and browser
+  clients can show the resulting files without parsing unified diffs.
 - `vouch review-ui --allow-dual-solve` — a browser SPA that runs `dual-solve`
   on a github issue link, streams progress over the review-ui's websocket, shows
   both engines' diffs side by side, and lets you pick the winner. Off by default;

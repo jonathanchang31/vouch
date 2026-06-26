@@ -115,6 +115,8 @@ def test_run_starts_job_and_reaches_ready(git_kb, monkeypatch):
     job_id = r.json()["job_id"]
     state = _wait(c, job_id, {"ready"})
     assert [x["engine"] for x in state["candidates"]] == ["claude", "codex"]
+    assert state["candidates"][0]["changed_files"] == ["x"]
+    assert state["candidates"][1]["changed_files"] == ["y"]
     # autonomy is forced to edit regardless of input
     assert calls[0]["autonomy"] == "edit"
 
@@ -197,6 +199,7 @@ def test_choose_winner_finalizes_and_returns_ids(git_kb, monkeypatch):
     assert r.status_code == 200
     assert r.json()["proposed_ids"] == ["prop-1", "prop-2"]
     assert r.json()["kept_branch"] == "vouch-dual/4-fix-bug-codex"
+    assert r.json()["changed_files"] == ["y"]
     assert captured["winner"] == "codex"
     assert captured["record"] is True and captured["reason"] == "cleaner"
 
@@ -213,6 +216,7 @@ def test_choose_neither_records_nothing(git_kb, monkeypatch):
                json={"job_id": job_id, "winner": None, "reason": ""})
     assert r.status_code == 200
     assert r.json()["proposed_ids"] == [] and r.json()["kept_branch"] is None
+    assert r.json()["changed_files"] == []
     assert captured["winner"] is None
 
 

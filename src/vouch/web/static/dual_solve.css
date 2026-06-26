@@ -5,6 +5,7 @@
 .ds-error { color:#b00; }
 .ds-panes { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
 .ds-pane { border:1px solid #ccc; padding:.5rem; overflow:auto; }
+.ds-changed-files { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:12px; margin:.25rem 0 .5rem; }
 .ds-file-head { font-weight:600; margin-top:.5rem; }
 .ds-pane pre { margin:0; font-size:12px; overflow-x:auto; }
 .ln-add { background:#e6ffed; display:block; }
