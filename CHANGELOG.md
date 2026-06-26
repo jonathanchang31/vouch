@@ -17,6 +17,12 @@ All notable changes to vouch are documented here. Format follows
   non-interactive (emits both diffs, keeps both branches); `--no-record` and
   `--dry-run` propose nothing. Each phase (fetch, ground, and per-engine run
   with elapsed time and diff size) reports progress to stderr while it works.
+- `vouch review-ui --allow-dual-solve` — a browser SPA that runs `dual-solve`
+  on a github issue link, streams progress over the review-ui's websocket, shows
+  both engines' diffs side by side, and lets you pick the winner. Off by default;
+  localhost-first; edit-only over http; the pick keeps the branch and proposes
+  the rationale into the KB through the existing review gate (nothing
+  auto-approves). See `proposals/VEP-0006-dual-solve-web.md`.
 - `vouch auto-pr <repo-url>` — open N mergeable PRs against any github repo.
   Sources open issues first then agent-discovered improvements, bootstraps a
   contribution skill from the repo's merged PRs when it ships no guidance, and
