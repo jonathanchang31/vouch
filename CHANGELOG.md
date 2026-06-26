@@ -15,7 +15,8 @@ All notable changes to vouch are documented here. Format follows
   plus up to three approach claims land in `proposed/`, so approval still
   requires a human `vouch approve`. Nothing is auto-approved. `--json` is
   non-interactive (emits both diffs, keeps both branches); `--no-record` and
-  `--dry-run` propose nothing.
+  `--dry-run` propose nothing. Each phase (fetch, ground, and per-engine run
+  with elapsed time and diff size) reports progress to stderr while it works.
 - `vouch auto-pr <repo-url>` — open N mergeable PRs against any github repo.
   Sources open issues first then agent-discovered improvements, bootstraps a
   contribution skill from the repo's merged PRs when it ships no guidance, and

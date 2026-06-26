@@ -2005,6 +2005,7 @@ def dual_solve_cmd(issue_url: str, claude_effort: str, codex_effort: str,
             store, issue_url, root, runner,
             claude_effort=claude_effort, codex_effort=codex_effort,
             autonomy=autonomy, dry_run=dry_run,
+            on_progress=lambda m: click.echo(m, err=True),
         )
     except (ValueError, RuntimeError) as e:
         raise click.ClickException(str(e)) from e

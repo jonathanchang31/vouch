@@ -277,6 +277,44 @@ def test_prepare_runs_both_engines(tmp_path, monkeypatch):
     assert set(engines) == {"claude", "codex"}
 
 
+def test_prepare_reports_progress(tmp_path, monkeypatch):
+    store = KBStore.init(tmp_path)
+    monkeypatch.setattr(ds, "fetch_issue",
+                        lambda ref, runner: ds.Issue("Fix the parser", "b",
+                                                     number=42))
+    monkeypatch.setattr(ds, "ground_prompt", lambda store, q, **k: "ctx")
+
+    def fake_rc(engine, issue, prompt, root, base, worktree, runner, *,
+                commit=True):
+        if engine.name == "codex":
+            return ds.Candidate(engine.name, f"b-{engine.name}", worktree,
+                                ok=False, error="engine produced no diff")
+        return ds.Candidate(engine.name, f"b-{engine.name}", worktree,
+                            diff="x\ny", ok=True)
+
+    monkeypatch.setattr(ds, "run_candidate", fake_rc)
+    msgs: list[str] = []
+    ds.prepare(store, "o/n#42", tmp_path, FakeRunner(),
+               workdir=tmp_path / "wd", on_progress=msgs.append)
+
+    # the phases an operator needs to see while the engines work
+    assert any("fetching issue" in m for m in msgs)
+    assert any("#42" in m and "Fix the parser" in m for m in msgs)
+    assert any("knowledge base" in m.lower() for m in msgs)
+    # a "running" line then a completion line per engine, in order
+    i_run_claude = next(i for i, m in enumerate(msgs)
+                        if m.startswith("running claude"))
+    i_done_claude = next(i for i, m in enumerate(msgs)
+                         if m.startswith("claude:"))
+    i_run_codex = next(i for i, m in enumerate(msgs)
+                       if m.startswith("running codex"))
+    assert i_run_claude < i_done_claude < i_run_codex
+    # the ok line carries the diff size; the failed line carries the error
+    assert any(m.startswith("claude:") and "2 lines" in m for m in msgs)
+    assert any(m.startswith("codex:") and "engine produced no diff" in m
+               for m in msgs)
+
+
 def test_finalize_records_and_keeps_winner(tmp_path, monkeypatch):
     store = KBStore.init(tmp_path)
     monkeypatch.setattr(ds, "record_to_kb",
