@@ -10,7 +10,7 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
@@ -45,7 +45,7 @@ class _RunReq(BaseModel):
 
 class _ChooseReq(BaseModel):
     job_id: str
-    winner: str | None = None
+    winner: Literal["claude", "codex"] | None = None
     reason: str = ""
 
 
@@ -170,6 +170,7 @@ def register(
         except (ValueError, RuntimeError) as exc:
             job.status = "error"
             job.error = str(exc)
+            await hub.broadcast(_frame(job, "error", str(exc)))
             raise HTTPException(500, f"finalize failed: {exc}") from exc
         job.proposed_ids = ids
         job.kept_branch = chosen.branch if chosen is not None else None

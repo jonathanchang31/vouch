@@ -26,7 +26,12 @@ def git_kb(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> KBStore:
 
 def _client(git_kb: KBStore, *, enabled: bool = True) -> TestClient:
     app = create_app(str(git_kb.root), allow_dual_solve=enabled)
-    return TestClient(app)
+    client = TestClient(app)
+    # enter so the portal stays alive across requests; background tasks
+    # (e.g. _run_job) can then run to completion without being cancelled when
+    # the first request's ephemeral portal closes.
+    client.__enter__()
+    return client
 
 
 def test_dual_solve_page_renders_when_enabled(git_kb):
@@ -179,7 +184,7 @@ def test_choose_neither_records_nothing(git_kb, monkeypatch):
     assert captured["winner"] is None
 
 
-def test_choose_before_ready_is_conflict(git_kb, monkeypatch):
+def test_choose_unknown_job_is_not_found(git_kb, monkeypatch):
     calls: list = []
     _fake_prepare(monkeypatch, calls=calls)
     _fake_finalize(monkeypatch, captured={})
@@ -190,6 +195,20 @@ def test_choose_before_ready_is_conflict(git_kb, monkeypatch):
     r = c.post("/dual-solve/choose",
                json={"job_id": "deadbeef", "winner": "claude", "reason": ""})
     assert r.status_code == 404
+
+
+def test_choose_when_not_ready_is_conflict(git_kb, monkeypatch):
+    from vouch.web import dual_solve_api as api
+    _fake_prepare(monkeypatch, calls=[])
+    _fake_finalize(monkeypatch, captured={})
+    c = _client(git_kb)
+    # a job that is mid-finalize cannot be chosen again.
+    c.app.state.dual_solve_job = api.DualSolveJob(
+        id="busy", issue_url="o/n#1", claude_effort="high",
+        codex_effort="high", status="finalizing")
+    r = c.post("/dual-solve/choose",
+               json={"job_id": "busy", "winner": "claude", "reason": ""})
+    assert r.status_code == 409
 
 
 def test_routes_require_auth_when_enabled(git_kb, monkeypatch):
