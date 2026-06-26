@@ -45,6 +45,17 @@ def test_parse_issue_ref_rejects_garbage():
         ds.parse_issue_ref("not an issue")
 
 
+def test_changed_files_extracts_paths_from_git_diff():
+    diff = (
+        "diff --git a/README.md b/README.md\n"
+        "+note\n"
+        "diff --git a/src/old.py b/src/new.py\n"
+        "--- a/src/old.py\n"
+        "+++ b/src/new.py\n"
+    )
+    assert ds.changed_files(diff) == ["README.md", "src/new.py"]
+
+
 def test_require_engines_raises_when_missing(monkeypatch):
     monkeypatch.setattr(ds.shutil, "which", lambda b: None)
     with pytest.raises(RuntimeError, match="not on PATH"):

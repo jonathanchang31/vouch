@@ -2031,7 +2031,8 @@ def dual_solve_cmd(issue_url: str, claude_effort: str, codex_effort: str,
                       "url": issue.url},
             "candidates": [
                 {"engine": c.engine, "branch": c.branch, "ok": c.ok,
-                 "error": c.error, "diff": c.diff} for c in candidates
+                 "error": c.error, "changed_files": ds_mod.changed_files(c.diff),
+                 "diff": c.diff} for c in candidates
             ],
         })
         return

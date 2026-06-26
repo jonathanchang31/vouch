@@ -51,6 +51,10 @@ class _ChooseReq(BaseModel):
 
 
 def _serialize(job: DualSolveJob) -> dict[str, Any]:
+    kept = next(
+        (c for c in job.candidates if job.kept_branch is not None and c.branch == job.kept_branch),
+        None,
+    )
     return {
         "id": job.id,
         "issue_url": job.issue_url,
@@ -63,11 +67,13 @@ def _serialize(job: DualSolveJob) -> dict[str, Any]:
         ),
         "candidates": [
             {"engine": c.engine, "branch": c.branch, "ok": c.ok,
-             "error": c.error, "diff": c.diff}
+             "error": c.error, "changed_files": ds.changed_files(c.diff),
+             "diff": c.diff}
             for c in job.candidates
         ],
         "proposed_ids": list(job.proposed_ids),
         "kept_branch": job.kept_branch,
+        "changed_files": ds.changed_files(kept.diff) if kept is not None else [],
         "error": job.error,
     }
 
@@ -190,4 +196,8 @@ def register(
         job.kept_branch = chosen.branch if chosen is not None else None
         job.status = "done"
         await hub.broadcast(_frame(job, "done"))
-        return {"kept_branch": job.kept_branch, "proposed_ids": ids}
+        return {
+            "kept_branch": job.kept_branch,
+            "proposed_ids": ids,
+            "changed_files": ds.changed_files(chosen.diff) if chosen is not None else [],
+        }

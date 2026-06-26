@@ -24,6 +24,9 @@ All notable changes to vouch are documented here. Format follows
   temporary copied home containing known Claude/Codex credential files, so agent
   writes stay in the throwaway dual-solve branches and host credential files are
   not modified.
+- dual-solve JSON, review-ui job, and choose responses now include
+  `changed_files` for each candidate and the kept branch, so desktop and browser
+  clients can show the resulting files without parsing unified diffs.
 - `vouch review-ui --allow-dual-solve` — a browser SPA that runs `dual-solve`
   on a github issue link, streams progress over the review-ui's websocket, shows
   both engines' diffs side by side, and lets you pick the winner. Off by default;

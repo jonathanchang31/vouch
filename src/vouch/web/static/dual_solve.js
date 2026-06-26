@@ -36,6 +36,7 @@ export default {
     const job = reactive({
       id: null, status: "idle", progress: [], candidates: [],
       issue: null, error: null, kept_branch: null, proposed_ids: [],
+      changed_files: [],
     });
 
     function applyState(s) {
@@ -62,7 +63,7 @@ export default {
     }
     async function run() {
       job.progress = []; job.error = null; job.candidates = [];
-      job.kept_branch = null; job.proposed_ids = [];
+      job.kept_branch = null; job.proposed_ids = []; job.changed_files = [];
       const r = await fetch("/dual-solve/run", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -83,6 +84,7 @@ export default {
         body: JSON.stringify({ job_id: job.id, winner, reason: reason.value }),
       });
       if (!r.ok) { job.error = `choose failed (${r.status})`; return; }
+      Object.assign(job, await r.json());
       await refresh();
     }
 
@@ -108,6 +110,9 @@ export default {
     <div v-for="c in job.candidates" :key="c.engine" class="ds-pane">
       <h2>{{c.engine}} <small>{{c.branch}}</small></h2>
       <p v-if="!c.ok" class="ds-error">failed: {{c.error}}</p>
+      <ul v-if="c.changed_files && c.changed_files.length" class="ds-changed-files">
+        <li v-for="f in c.changed_files" :key="f">{{f}}</li>
+      </ul>
       <div v-for="f in c.files" :key="f.path" class="ds-file">
         <div class="ds-file-head">{{f.path}}</div>
         <pre><code><span v-for="(l,i) in f.lines" :key="i" :class="'ln-'+l.cls">{{l.text}}\\n</span></code></pre>
@@ -124,6 +129,12 @@ export default {
 
   <div v-if="job.status==='done'" class="ds-result">
     <p v-if="job.kept_branch">kept <code>{{job.kept_branch}}</code></p>
+    <div v-if="job.changed_files && job.changed_files.length">
+      <p>changed files</p>
+      <ul class="ds-changed-files">
+        <li v-for="f in job.changed_files" :key="f">{{f}}</li>
+      </ul>
+    </div>
     <p v-for="pid in job.proposed_ids" :key="pid">
       proposed <a :href="'/'">{{pid}}</a> — review in the queue
     </p>
