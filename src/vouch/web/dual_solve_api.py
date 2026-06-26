@@ -5,14 +5,64 @@ choose step only ever proposes to the kb.
 """
 from __future__ import annotations
 
+import asyncio
+import uuid
 from collections.abc import Callable
+from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
 from .. import dual_solve as ds
 from ..auto_pr import SubprocessRunner
+
+
+@dataclass
+class DualSolveJob:
+    id: str
+    issue_url: str
+    claude_effort: str
+    codex_effort: str
+    status: str = "running"
+    progress: list[str] = field(default_factory=list)
+    issue: Any = None
+    candidates: list = field(default_factory=list)
+    engines: dict = field(default_factory=dict)
+    proposed_ids: list[str] = field(default_factory=list)
+    kept_branch: str | None = None
+    error: str | None = None
+
+
+class _RunReq(BaseModel):
+    issue_url: str
+    claude_effort: str = "high"
+    codex_effort: str = "high"
+
+
+def _serialize(job: DualSolveJob) -> dict[str, Any]:
+    return {
+        "id": job.id,
+        "issue_url": job.issue_url,
+        "status": job.status,
+        "progress": list(job.progress),
+        "issue": (
+            {"number": job.issue.number, "title": job.issue.title,
+             "url": job.issue.url}
+            if job.issue is not None else None
+        ),
+        "candidates": [
+            {"engine": c.engine, "branch": c.branch, "ok": c.ok,
+             "error": c.error, "diff": c.diff}
+            for c in job.candidates
+        ],
+        "proposed_ids": list(job.proposed_ids),
+        "kept_branch": job.kept_branch,
+        "error": job.error,
+    }
 
 
 def register(
@@ -32,9 +82,66 @@ def register(
     runner = SubprocessRunner()
     # fail fast at app-build time if we're not in a git repo: dual-solve can't
     # create worktrees otherwise.
-    git_root = ds.repo_root(runner, store.root)
+    git_root: Path = ds.repo_root(runner, store.root)
     app.state.dual_solve_git_root = str(git_root)
 
     @app.get("/dual-solve", response_class=HTMLResponse, dependencies=guarded)
     def dual_solve_page(request: Request) -> Any:
         return render(request, "dual_solve.html", {"active": "dual-solve"})
+
+    def _frame(job: DualSolveJob, event: str, message: str = "") -> dict[str, Any]:
+        return {"type": "dual_solve", "job_id": job.id, "event": event,
+                "message": message}
+
+    async def _run_job(job: DualSolveJob, loop: asyncio.AbstractEventLoop) -> None:
+        def on_progress(msg: str) -> None:
+            # called from the threadpool worker; bridge to the async hub.
+            job.progress.append(msg)
+            asyncio.run_coroutine_threadsafe(
+                hub.broadcast(_frame(job, "progress", msg)), loop)
+        try:
+            issue, candidates, engines = await run_in_threadpool(
+                ds.prepare, store, job.issue_url, git_root, runner,
+                claude_effort=job.claude_effort, codex_effort=job.codex_effort,
+                autonomy="edit", on_progress=on_progress,
+            )
+            job.issue, job.candidates, job.engines = issue, candidates, engines
+            job.status = "ready"
+            await hub.broadcast(_frame(job, "ready"))
+        except Exception as exc:
+            # broad on purpose: any prepare failure must mark the job as errored
+            # and notify, never crash the background task. (BLE is not in the
+            # ruff ruleset, so no noqa is needed or wanted here.)
+            job.status = "error"
+            job.error = str(exc)
+            await hub.broadcast(_frame(job, "error", str(exc)))
+
+    @app.post("/dual-solve/run", status_code=201, dependencies=guarded)
+    async def dual_solve_run(req: _RunReq) -> dict[str, str]:
+        active = getattr(app.state, "dual_solve_job", None)
+        if active is not None and active.status not in ("done", "error"):
+            raise HTTPException(409, "a dual-solve job is already running")
+        try:
+            ds.parse_issue_ref(req.issue_url)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        # clean up a stale prior job's worktrees so they don't leak.
+        if active is not None and active.candidates:
+            keep = {active.kept_branch} if active.kept_branch else set()
+            await run_in_threadpool(
+                ds.cleanup, git_root, active.candidates, keep, runner)
+        job = DualSolveJob(
+            id=uuid.uuid4().hex, issue_url=req.issue_url,
+            claude_effort=req.claude_effort, codex_effort=req.codex_effort,
+        )
+        app.state.dual_solve_job = job
+        loop = asyncio.get_running_loop()
+        app.state.dual_solve_task = asyncio.create_task(_run_job(job, loop))
+        return {"job_id": job.id}
+
+    @app.get("/dual-solve/job/{job_id}", dependencies=guarded)
+    def dual_solve_job(job_id: str) -> dict[str, Any]:
+        job = getattr(app.state, "dual_solve_job", None)
+        if job is None or job.id != job_id:
+            raise HTTPException(404, "no such job")
+        return _serialize(job)
