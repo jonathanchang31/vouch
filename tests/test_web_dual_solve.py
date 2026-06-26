@@ -221,3 +221,12 @@ def test_routes_require_auth_when_enabled(git_kb, monkeypatch):
     # with the token, the page renders
     ok = c.get("/dual-solve", headers={"Authorization": "Bearer sekret"})
     assert ok.status_code == 200
+
+
+def test_spa_assets_are_served(git_kb):
+    c = _client(git_kb)
+    for path in ("/static/dual_solve.js", "/static/dual_solve.css",
+                 "/static/vendor/vue.esm-browser.prod.js"):
+        assert c.get(path).status_code == 200, path
+    page = c.get("/dual-solve").text
+    assert "/static/dual_solve.js" in page and "createApp" in page
