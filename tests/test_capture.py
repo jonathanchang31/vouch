@@ -150,3 +150,61 @@ def test_pending_count_counts_capture_actor(store: KBStore, tmp_path: Path) -> N
     _seed(store, "s1", 3)
     cap.finalize(store, "s1", cwd=tmp_path)
     assert cap.pending_count(store) == 1
+
+
+import json as _json  # noqa: E402
+
+from click.testing import CliRunner  # noqa: E402
+
+from vouch.cli import cli  # noqa: E402
+from vouch.models import ProposalStatus  # noqa: E402
+
+
+def _run(store: KBStore, args: list[str], stdin: str = "") -> object:
+    runner = CliRunner()
+    return runner.invoke(
+        cli, args, input=stdin,
+        env={"VOUCH_KB_PATH": str(store.kb_dir)},
+    )
+
+
+def test_cli_observe_appends(store: KBStore) -> None:
+    payload = _json.dumps({
+        "session_id": "cc-1",
+        "tool_name": "Edit",
+        "tool_input": {"file_path": "/r/a.py"},
+        "tool_response": "ok",
+    })
+    res = _run(store, ["capture", "observe"], stdin=payload)
+    assert res.exit_code == 0
+    assert cap.buffer_path(store, "cc-1").exists()
+
+
+def test_cli_observe_never_errors_on_garbage(store: KBStore) -> None:
+    res = _run(store, ["capture", "observe"], stdin="not json")
+    assert res.exit_code == 0
+
+
+def test_cli_finalize_files_proposal(store: KBStore) -> None:
+    for i in range(3):
+        cap.observe(store, "cc-2", tool="Edit", summary=f"Edited f{i}.py", now=float(i))
+    payload = _json.dumps({"session_id": "cc-2", "cwd": str(store.kb_dir.parent)})
+    res = _run(store, ["capture", "finalize"], stdin=payload)
+    assert res.exit_code == 0
+    pend = store.list_proposals(ProposalStatus.PENDING)
+    assert any(p.proposed_by == cap.CAPTURE_ACTOR for p in pend)
+
+
+def test_cli_banner_emits_when_pending(store: KBStore) -> None:
+    for i in range(3):
+        cap.observe(store, "cc-3", tool="Edit", summary=f"Edited f{i}.py", now=float(i))
+    cap.finalize(store, "cc-3", cwd=store.kb_dir.parent)
+    res = _run(store, ["capture", "banner"])
+    assert res.exit_code == 0
+    assert "awaiting review" in res.output
+
+
+def test_cli_banner_silent_when_none(store: KBStore) -> None:
+    res = _run(store, ["capture", "banner"])
+    assert res.exit_code == 0
+    assert res.output.strip() == ""
