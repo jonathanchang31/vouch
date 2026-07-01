@@ -85,3 +85,68 @@ def test_summarize_tool_bash_flags_error() -> None:
     assert obs is not None
     assert obs["cmd"] == "pytest"
     assert "failed" in obs["summary"].lower()
+
+
+def _seed(store: KBStore, sid: str, n: int) -> None:
+    for i in range(n):
+        cap.observe(store, sid, tool="Edit", summary=f"Edited f{i}.py", now=float(i))
+
+
+def test_finalize_files_one_pending_page(store: KBStore, tmp_path: Path) -> None:
+    from vouch.models import ProposalKind, ProposalStatus
+
+    _seed(store, "s1", 3)
+    result = cap.finalize(store, "s1", cwd=tmp_path)
+    pid = result["summary_proposal_id"]
+    assert pid is not None
+    pend = store.list_proposals(ProposalStatus.PENDING)
+    match = [p for p in pend if p.id == pid]
+    assert len(match) == 1
+    pr = match[0]
+    assert pr.kind == ProposalKind.PAGE
+    assert pr.proposed_by == cap.CAPTURE_ACTOR
+    assert pr.payload["type"] == cap.CAPTURE_PAGE_TYPE
+    assert pr.status == ProposalStatus.PENDING
+
+
+def test_finalize_below_min_files_nothing(store: KBStore, tmp_path: Path) -> None:
+    from vouch.models import ProposalStatus
+
+    _seed(store, "s1", 2)  # below default min_observations=3, non-git cwd
+    result = cap.finalize(store, "s1", cwd=tmp_path)
+    assert result["summary_proposal_id"] is None
+    assert store.list_proposals(ProposalStatus.PENDING) == []
+
+
+def test_finalize_deletes_buffer(store: KBStore, tmp_path: Path) -> None:
+    _seed(store, "s1", 3)
+    cap.finalize(store, "s1", cwd=tmp_path)
+    assert not cap.buffer_path(store, "s1").exists()
+
+
+def test_finalize_noop_when_disabled(store: KBStore, tmp_path: Path) -> None:
+    from vouch.models import ProposalStatus
+
+    _seed(store, "s1", 5)
+    store.config_path.write_text("capture:\n  enabled: false\n")
+    result = cap.finalize(store, "s1", cwd=tmp_path)
+    assert result["summary_proposal_id"] is None
+    assert store.list_proposals(ProposalStatus.PENDING) == []
+
+
+def test_build_summary_body_has_sections() -> None:
+    obs = [
+        {"ts": 1.0, "tool": "Edit", "summary": "Edited a.py", "files": ["a.py"]},
+        {"ts": 2.0, "tool": "Bash", "summary": "Ran: pytest", "cmd": "pytest"},
+    ]
+    title, body = cap.build_summary_body("s1", obs, ["a.py"], "a.py | 2 +-")
+    assert "s1" in title
+    assert "files modified this session" in body.lower()
+    assert "## activity" in body.lower()
+    assert "a.py" in body
+
+
+def test_pending_count_counts_capture_actor(store: KBStore, tmp_path: Path) -> None:
+    _seed(store, "s1", 3)
+    cap.finalize(store, "s1", cwd=tmp_path)
+    assert cap.pending_count(store) == 1

@@ -11,6 +11,7 @@ intact. See docs/superpowers/specs/2026-07-01-vouch-session-autocapture-design.m
 from __future__ import annotations
 
 import json
+import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -18,6 +19,8 @@ from typing import Any
 
 import yaml
 
+from .models import ProposalStatus
+from .proposals import propose_page
 from .storage import KBStore
 
 DEFAULT_ENABLED = True
@@ -161,3 +164,119 @@ def summarize_tool(
     else:  # Task
         out["summary"] = f"{tool_name} completed"
     return out
+
+
+def _git_changes(cwd: Path) -> tuple[list[str], str]:
+    """Return (changed_files, diff_stat). Empty on any failure / non-repo."""
+    try:
+        names = subprocess.run(
+            ["git", "diff", "--name-only", "HEAD"],
+            cwd=cwd, capture_output=True, text=True, timeout=3, check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return [], ""
+    files = [f for f in names.stdout.splitlines() if f.strip()]
+    if not files:
+        return [], ""
+    try:
+        stat = subprocess.run(
+            ["git", "diff", "HEAD", "--stat"],
+            cwd=cwd, capture_output=True, text=True, timeout=3, check=False,
+        ).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        stat = ""
+    return files, stat
+
+
+def build_summary_body(
+    session_id: str,
+    observations: list[dict[str, Any]],
+    changed_files: list[str],
+    git_stat: str,
+    *,
+    project: str | None = None,
+    generated_at: str | None = None,
+) -> tuple[str, str]:
+    tool_counts: dict[str, int] = {}
+    files: set[str] = set(changed_files)
+    commands: list[str] = []
+    for obs in observations:
+        tool = str(obs.get("tool", ""))
+        tool_counts[tool] = tool_counts.get(tool, 0) + 1
+        for f in obs.get("files") or []:
+            files.add(str(f))
+        cmd = obs.get("cmd")
+        if cmd:
+            commands.append(str(cmd))
+    title = f"session summary: {project or 'workspace'} ({session_id})"
+    lines: list[str] = [f"# {title}", ""]
+    if generated_at:
+        lines.append(f"- generated: {generated_at}")
+    lines += [f"- session: `{session_id}`", f"- observations: {len(observations)}", ""]
+    if files:
+        lines += ["## files modified this session", ""]
+        lines += [f"- {f}" for f in sorted(files)[:20]]
+        lines.append("")
+    if git_stat:
+        lines += ["## git changes", "", "```", git_stat, "```", ""]
+    if tool_counts:
+        lines += ["## activity", ""]
+        lines += [f"- {t}: {tool_counts[t]}" for t in sorted(tool_counts)]
+        lines.append("")
+    if commands:
+        lines += ["## notable commands", ""]
+        lines += [f"- `{c}`" for c in commands[:10]]
+        lines.append("")
+    if observations:
+        lines += ["## observations", ""]
+        lines += [f"- {o.get('summary', '')}" for o in observations[:30]]
+        lines.append("")
+    return title, "\n".join(lines).rstrip() + "\n"
+
+
+def finalize(
+    store: KBStore,
+    session_id: str,
+    *,
+    cwd: Path | None = None,
+    project: str | None = None,
+    generated_at: str | None = None,
+    config: CaptureConfig | None = None,
+) -> dict[str, Any]:
+    """Roll a session buffer into one PENDING summary proposal. No approve()."""
+    cfg = config or load_config(store)
+    path = buffer_path(store, session_id)
+    observations = _read_observations(path)
+    if not cfg.enabled:
+        return {"captured": len(observations), "summary_proposal_id": None,
+                "skipped": "disabled"}
+    changed_files, git_stat = _git_changes(cwd or Path.cwd())
+    total = len(observations) + len(changed_files)
+    if total < cfg.min_observations:
+        if path.exists():
+            path.unlink()
+        return {"captured": total, "summary_proposal_id": None,
+                "skipped": "below-min"}
+    title, body = build_summary_body(
+        session_id, observations, changed_files, git_stat,
+        project=project, generated_at=generated_at,
+    )
+    proposal = propose_page(
+        store,
+        title=title,
+        body=body,
+        page_type=CAPTURE_PAGE_TYPE,
+        proposed_by=CAPTURE_ACTOR,
+        session_id=session_id,
+        rationale="auto-captured session summary",
+    )
+    if path.exists():
+        path.unlink()
+    return {"captured": total, "summary_proposal_id": proposal.id}
+
+
+def pending_count(store: KBStore) -> int:
+    return sum(
+        1 for p in store.list_proposals(ProposalStatus.PENDING)
+        if p.proposed_by == CAPTURE_ACTOR
+    )
