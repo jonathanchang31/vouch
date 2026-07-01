@@ -50,19 +50,43 @@ class DetectResult:
     config_used: dict[str, Any] = field(default_factory=dict)
 
 
+_DEFAULT_MIN_SESSIONS = 2
+_DEFAULT_MIN_CLAIMS = 3
+_DEFAULT_TOP_K = 10
+
+
 def _load_theme_config(store: KBStore) -> dict[str, Any]:
-    """Read theme-detection config with defensive defaults."""
+    """Read theme-detection config with defensive defaults.
+
+    Mirrors the salience.reflex_cfg pattern: every value is type-checked
+    and falls back to its default rather than crashing on malformed input.
+    """
     try:
         raw = yaml.safe_load(store.config_path.read_text())
         cfg = raw if isinstance(raw, dict) else {}
     except Exception:
         cfg = {}
-    themes = cfg.get("themes", {})
+    themes_cfg = cfg.get("themes") if isinstance(cfg, dict) else None
+    if not isinstance(themes_cfg, dict):
+        themes_cfg = {}
+
+    enabled = themes_cfg.get("enabled", True)
+    enabled = bool(enabled) if isinstance(enabled, bool) else True
+
+    ms = themes_cfg.get("min_sessions", _DEFAULT_MIN_SESSIONS)
+    ms = ms if isinstance(ms, int) and ms > 0 else _DEFAULT_MIN_SESSIONS
+
+    mc = themes_cfg.get("min_claims", _DEFAULT_MIN_CLAIMS)
+    mc = mc if isinstance(mc, int) and mc > 0 else _DEFAULT_MIN_CLAIMS
+
+    tk = themes_cfg.get("top_k", _DEFAULT_TOP_K)
+    tk = tk if isinstance(tk, int) and tk > 0 else _DEFAULT_TOP_K
+
     return {
-        "enabled": bool(themes.get("enabled", True)),
-        "min_sessions": int(themes.get("min_sessions", 2)),
-        "min_claims": int(themes.get("min_claims", 3)),
-        "top_k": int(themes.get("top_k", 10)),
+        "enabled": enabled,
+        "min_sessions": ms,
+        "min_claims": mc,
+        "top_k": tk,
     }
 
 
@@ -143,11 +167,15 @@ def detect_themes(
     # Merge overlapping pairs into larger clusters.
     clusters = _merge_clusters(raw_clusters, min_sessions=ms, min_claims=mc)
 
-    # Deduplicate against existing theme pages.
+    # Deduplicate against existing theme pages. Compare on the resolvable
+    # entity subset (the set that propose_theme would actually store) so
+    # dedup stays consistent even when some cluster entities don't resolve.
     existing_themes = _existing_theme_entity_sets(store)
+    resolvable = _resolvable_entities(store)
     clusters = [
         c for c in clusters
-        if frozenset(c.entities) not in existing_themes
+        if frozenset(e for e in c.entities if e in resolvable)
+        not in existing_themes
     ]
 
     # Rank by score descending, take top_k.
@@ -217,6 +245,11 @@ def _merge_clusters(
             claim_count=len(all_claims),
         ))
     return merged
+
+
+def _resolvable_entities(store: KBStore) -> set[str]:
+    """Return the set of entity ids that exist in the store."""
+    return {e.id for e in store.list_entities()}
 
 
 def _existing_theme_entity_sets(store: KBStore) -> set[frozenset[str]]:

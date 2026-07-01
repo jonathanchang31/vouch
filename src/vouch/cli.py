@@ -1999,12 +1999,17 @@ def detect_themes_cmd(
             try:
                 p = themes.propose_theme(store, cluster, proposed_by=actor)
                 proposed.append(p)
-                click.echo(
-                    f"proposed: {p['theme_page_id']} "
-                    f"({p['claim_count']} claims, {p['session_count']} sessions)"
-                )
+                if not as_json:
+                    click.echo(
+                        f"proposed: {p['theme_page_id']} "
+                        f"({p['claim_count']} claims, "
+                        f"{p['session_count']} sessions)"
+                    )
             except Exception as e:
-                click.echo(f"skip: {', '.join(cluster.entities)} — {e}", err=True)
+                click.echo(
+                    f"skip: {', '.join(cluster.entities)} — {e}",
+                    err=True,
+                )
         if as_json:
             _emit_json({"proposed": proposed})
         return
