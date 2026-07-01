@@ -1029,11 +1029,18 @@ def _parse_meta(pairs: tuple[str, ...], *, flag: str = "--meta") -> dict[str, An
         if "=" not in pair:
             raise click.BadParameter(f"{flag} expects key=value, got {pair!r}")
         key, _, raw = pair.partition("=")
-        out[key.strip()] = yaml.safe_load(raw)
+        key = key.strip()
+        try:
+            out[key] = yaml.safe_load(raw)
+        except yaml.YAMLError as e:
+            raise click.BadParameter(
+                f"{flag} value for {key!r} is invalid YAML: {e}",
+            ) from e
     return out
 
 
-# Entity kinds `vouch new` can scaffold (issue #330).
+# Keep entity scaffolding intentionally narrow because `propose_entity` accepts
+# arbitrary type strings; only well-known EntityType names are routed here.
 _SCAFFOLD_ENTITY_TYPES: frozenset[str] = frozenset(
     {"person", "project", "repo", "company", "concept", "decision", "workflow"}
 )
@@ -1090,7 +1097,15 @@ def _prompt_missing_fields(
     still_missing: list[str] = []
     for field in missing:
         raw = click.prompt(field, default="", show_default=False)
-        metadata[field] = yaml.safe_load(raw) if raw else ""
+        if raw:
+            try:
+                metadata[field] = yaml.safe_load(raw)
+            except yaml.YAMLError as e:
+                raise click.BadParameter(
+                    f"interactive value for {field!r} is invalid YAML: {e}",
+                ) from e
+        else:
+            metadata[field] = ""
         if _field_missing(metadata.get(field)):
             still_missing.append(field)
     return still_missing
@@ -1099,7 +1114,8 @@ def _prompt_missing_fields(
 def _print_new_page_draft(draft: dict[str, Any]) -> None:
     click.echo(f"kind: {draft['kind']} (page)")
     click.echo(f"title: {draft['title']}")
-    click.echo(f"frontmatter: {json.dumps(draft['frontmatter'], sort_keys=True)}")
+    fm = yaml.safe_dump(draft["frontmatter"], default_flow_style=True).strip()
+    click.echo(f"frontmatter: {fm}")
     missing = draft["missing_required_fields"]
     if missing:
         click.echo(f"missing required fields: {', '.join(missing)}")
@@ -1109,15 +1125,15 @@ def _print_new_page_draft(draft: dict[str, Any]) -> None:
         click.echo("citations: required (reminder appended to body)")
     if draft.get("body"):
         click.echo(f"body:\n{draft['body']}")
-    if draft.get("proposal_id"):
-        click.echo(f"proposal id (dry-run): {draft['proposal_id']}")
+    if draft.get("id"):
+        click.echo(f"proposal id (dry-run): {draft['id']}")
 
 
 def _print_new_entity_draft(draft: dict[str, Any]) -> None:
     click.echo(f"kind: {draft['kind']} (entity)")
     click.echo(f"name: {draft['name']}")
-    if draft.get("proposal_id"):
-        click.echo(f"proposal id (dry-run): {draft['proposal_id']}")
+    if draft.get("id"):
+        click.echo(f"proposal id (dry-run): {draft['id']}")
 
 
 @cli.command(name="new")
@@ -1173,7 +1189,7 @@ def new_cmd(
                     proposed_by=_whoami(),
                     dry_run=True,
                 )
-            draft["proposal_id"] = pr.id
+            draft["id"] = pr.id
             if as_json:
                 _emit_json(draft)
             else:
@@ -1205,6 +1221,11 @@ def new_cmd(
         missing = _prompt_missing_fields(missing, metadata)
 
     citation_reminder = requires_citations and not (claims or sources)
+    if citation_reminder and not dry_run:
+        raise click.ClickException(
+            "this page kind requires citations; pass --claim/--source, "
+            "or rerun with --dry-run to print a draft with the citation reminder"
+        )
     if citation_reminder:
         body = body + _CITATION_REMINDER
 
@@ -1233,7 +1254,7 @@ def new_cmd(
                     proposed_by=_whoami(),
                     dry_run=True,
                 )
-            page_draft["proposal_id"] = pr.id
+            page_draft["id"] = pr.id
         if as_json:
             _emit_json(page_draft)
         else:
