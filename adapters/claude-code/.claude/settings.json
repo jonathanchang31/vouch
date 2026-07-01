@@ -21,6 +21,7 @@
   "hooks": {
     "SessionStart": [
       {
+        "comment": "finalize old buffers from previous sessions; current session will be finalized here too on next session start (fallback: windowclose event not yet supported by claude-code extension)",
         "matcher": "*",
         "hooks": [
           {
