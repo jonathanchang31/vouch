@@ -80,6 +80,16 @@ def _starter_config() -> dict[str, Any]:
             "require_human_approval": True,
             "expire_pending_after_days": 90,
         },
+        "capture": {
+            # auto-capture claude code sessions into pending summaries.
+            "enabled": True,
+            "min_observations": 3,
+        },
+        "recall": {
+            # inject a digest of all approved knowledge at session start.
+            "enabled": True,
+            "max_chars": 12000,
+        },
         "retrieval": {
             # auto = embedding -> fts5 -> substring; or pin one of
             # embedding | fts5 | substring. See context._retrieve.
@@ -243,7 +253,7 @@ class KBStore:
         gi = kb.kb_dir / ".gitignore"
         if not gi.exists():
             # state.db is derived; proposed/ is the agent's scratch space.
-            gi.write_text("proposed/\nstate.db\nstate.db-*\n", encoding="utf-8")
+            gi.write_text("proposed/\ncaptures/\nstate.db\nstate.db-*\n", encoding="utf-8")
         return kb
 
     # --- paths -------------------------------------------------------------
