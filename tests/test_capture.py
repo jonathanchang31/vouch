@@ -599,3 +599,55 @@ def test_finalize_all_except_returns_proposal_ids(tmp_path):
     from vouch.models import ProposalStatus
     pending = store.list_proposals(ProposalStatus.PENDING)
     assert len(pending) > 0
+
+
+def test_capture_e2e_sessionstart_cleanup_then_finalize(tmp_path):
+    """End-to-end: old buffers cleaned up on sessionstart, current session on finalize."""
+    import os
+    import time as time_mod
+
+    store = _make_store(tmp_path)
+
+    # Simulate a previous session that crashed/closed without finalize
+    old_sess = "crashed-session"
+    old_path = cap.buffer_path(store, old_sess)
+    old_path.parent.mkdir(parents=True, exist_ok=True)
+    observations = [
+        '{"ts": 1.0, "tool": "Read", "summary": "test1"}',
+        '{"ts": 2.0, "tool": "Read", "summary": "test2"}',
+        '{"ts": 3.0, "tool": "Read", "summary": "test3"}',
+    ]
+    old_path.write_text("\n".join(observations) + "\n")
+    old_mtime = time_mod.time() - 7200  # 2 hours ago
+    os.utime(old_path, (old_mtime, old_mtime))
+
+    # Simulate a new session starting
+    new_sess = "new-session"
+
+    # 1. SessionStart cleanup (finalize old buffers)
+    cleanup_result = cap.finalize_all_except(
+        store, new_sess, max_age_seconds=3600.0
+    )
+    assert old_sess in cleanup_result["finalized"]
+    assert not old_path.exists()
+
+    # Verify old session was proposed
+    pending_before = store.list_proposals(ProposalStatus.PENDING)
+    old_proposals = [p for p in pending_before if p.session_id == old_sess]
+    assert len(old_proposals) == 1
+
+    # 2. SessionEnd finalize (current session)
+    new_path = cap.buffer_path(store, new_sess)
+    new_path.write_text("\n".join(observations) + "\n")
+
+    finalize_result = cap.finalize(store, new_sess)
+    assert finalize_result["summary_proposal_id"] is not None
+    assert not new_path.exists()
+
+    # Verify new session was proposed
+    pending_after = store.list_proposals(ProposalStatus.PENDING)
+    new_proposals = [p for p in pending_after if p.session_id == new_sess]
+    assert len(new_proposals) == 1
+
+    # Total proposals: old + new
+    assert len(pending_after) >= 2
