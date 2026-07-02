@@ -72,7 +72,7 @@ worth walking through, open a PR. Keep every command runnable and verified.
 - **Quickstart:** [`../getting-started.md`](../getting-started.md) — the
   ten-minute version of the first tutorial.
 - **Worked example:** [`../example-session.md`](../example-session.md) — a full
-  propose → review → commit → recall loop captured from a real run.
+  automatic session capture → review → commit → recall loop.
 - **Reference:** [`../object-model.md`](../object-model.md) — claims, pages,
   entities, relations, sources. [`../review-gate.md`](../review-gate.md) — the
   gate in depth.
