@@ -1,0 +1,85 @@
+name: release
+
+# Publish a version tag (e.g. v1.1.0): build the sdist + wheel, publish to
+# PyPI via Trusted Publishing (OIDC — no API token stored), and create the
+# GitHub release with the dists attached and the matching CHANGELOG section
+# as the body. The release title comes from the annotated tag's subject
+# (falls back to the tag name for lightweight tags).
+# One-time setup on PyPI: add a trusted publisher for project `vouch-kb`
+# pointing at vouchdev/vouch, workflow `release.yml`, environment `pypi`.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade build
+      - run: python -m build
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write  # required for trusted publishing
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  github-release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # create the release for the tag
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v7
+        with:
+          name: dist
+          path: dist/
+      - name: collect release title and notes
+        id: notes
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          version="${tag#v}"
+          awk -v ver="$version" '
+            $0 ~ "^## \\[" ver "\\]" { on = 1; next }
+            on && /^## \[/ { exit }
+            on { print }
+          ' CHANGELOG.md > release-notes.md
+          if ! [ -s release-notes.md ]; then
+            echo "no CHANGELOG section for ${version}; falling back" >&2
+            printf 'See CHANGELOG.md.\n' > release-notes.md
+          fi
+          if [ "$(git cat-file -t "$tag" 2>/dev/null)" = "tag" ]; then
+            title="$(git tag -l --format='%(contents:subject)' "$tag")"
+          else
+            title="$tag"
+          fi
+          printf 'title=%s\n' "${title:-$tag}" >> "$GITHUB_OUTPUT"
+      - name: create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: ${{ steps.notes.outputs.title }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" dist/* \
+            --title "$TITLE" \
+            --notes-file release-notes.md
