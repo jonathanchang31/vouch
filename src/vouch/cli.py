@@ -12,7 +12,7 @@ import json
 import os
 import sys
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
@@ -24,10 +24,14 @@ import yaml
 from . import __version__, bundle, health, volunteer_context
 from . import audit as audit_mod
 from . import capture as capture_mod
+from . import digest as digest_mod
+from . import fetch as fetch_mod
+from . import inbox as inbox_mod
 from . import install_adapter as install_mod
 from . import lifecycle as life
 from . import metrics as metrics_mod
 from . import migrations as migrations_mod
+from . import notify as notify_mod
 from . import pr_cache as prc_mod
 from . import provenance as prov_mod
 from . import recall as recall_mod
@@ -43,7 +47,13 @@ from .context import build_context_pack
 from .lifecycle import LifecycleError
 from .logging_config import configure_logging
 from .models import Proposal, ProposalKind, ProposalStatus
-from .onboarding import seed_starter_kb
+from .onboarding import (
+    DEFAULT_TEMPLATE,
+    TEMPLATES,
+    available_templates,
+    seed_starter_kb,
+)
+from .page_filters import filter_pages, parse_kv
 from .page_kinds import PageKindError, load_page_kind_registry
 from .proposals import (
     EXPIRE_ACTOR,
@@ -148,12 +158,22 @@ def cli() -> None:
 
 @cli.command()
 @click.option("--path", default=".", type=click.Path(file_okay=False), show_default=True)
-def init(path: str) -> None:
+@click.option(
+    "--template",
+    default=DEFAULT_TEMPLATE,
+    show_default=True,
+    type=click.Choice(available_templates()),
+    help="Seed preset applied on top of the starter KB.",
+)
+def init(path: str, template: str) -> None:
     """Initialise a .vouch/ knowledge base at PATH."""
     root = Path(path).resolve()
     root.mkdir(parents=True, exist_ok=True)
     store = KBStore.init(root)
     seed = seed_starter_kb(store, approved_by=_whoami())
+    template_result = None
+    if template != DEFAULT_TEMPLATE:
+        template_result = TEMPLATES[template](store, approved_by=_whoami())
     health.rebuild_index(store)
     audit_mod.log_event(store.kb_dir, event="kb.init", actor=_whoami())
     click.echo(f"Initialised KB at {store.kb_dir}")
@@ -161,6 +181,14 @@ def init(path: str) -> None:
         click.echo(f"Seeded starter claim: {seed.claim_id}")
     else:
         click.echo("Starter claim already present.")
+    if template_result is not None:
+        if template_result.created_anything:
+            click.echo(
+                f"Applied template '{template_result.template}': "
+                f"{len(template_result.created)} item(s) created"
+            )
+        else:
+            click.echo(f"Template '{template_result.template}' already applied.")
     click.echo("Next steps:")
     click.echo("  vouch status")
     click.echo("  vouch search agent")
@@ -262,6 +290,53 @@ def stats(days: int, as_json: bool) -> None:
     )
     if cites["invalid_claim"] or cites["broken_citation"]:
         _echo(f"    invalid: {cites['invalid_claim']}, broken: {cites['broken_citation']}")
+
+
+@cli.command(name="digest")
+@click.option(
+    "--since",
+    default=digest_mod.DEFAULT_SINCE_SPEC,
+    show_default=True,
+    help="Window: a duration (7d, 12h), an ISO date, or 'all'.",
+)
+@click.option(
+    "--stale-days",
+    default=metrics_mod.DEFAULT_STALE_DAYS,
+    show_default=True,
+    type=int,
+    help="Freshness threshold for the stale-claims section.",
+)
+@click.option(
+    "--limit",
+    default=digest_mod.DEFAULT_LIMIT,
+    show_default=True,
+    type=int,
+    help="Cap per section (pending, decisions, stale, followups).",
+)
+@click.option(
+    "--format",
+    "fmt",
+    default="text",
+    show_default=True,
+    type=click.Choice(["text", "json", "markdown"]),
+)
+def digest_cmd(since: str, stale_days: int, limit: int, fmt: str) -> None:
+    """Read-only briefing: pending queue, recent decisions, stale claims,
+    followups due. Writes nothing — safe to run from cron."""
+    store = _load_store()
+    try:
+        since_dt = metrics_mod.parse_since(since)
+    except metrics_mod.MetricsError as e:
+        raise click.UsageError(str(e)) from e
+    d = digest_mod.build(
+        store, since=since_dt, stale_after_days=stale_days, limit=limit,
+    )
+    if fmt == "json":
+        _emit_json(d.to_dict())
+    elif fmt == "markdown":
+        click.echo(digest_mod.render_markdown(d))
+    else:
+        click.echo(digest_mod.render_text(d))
 
 
 def _findings_json(report) -> list[dict[str, Any]]:
@@ -656,6 +731,63 @@ def metrics(
     click.echo(
         f"  audit: {m.audit_events_in_window} events in window ({m.audit_events_total} total)"
     )
+
+
+# --- pages ------------------------------------------------------------------
+
+
+@cli.command(name="pages")
+@click.option("--kind", default=None, help="Filter by page kind (built-in or config-declared).")
+@click.option(
+    "--meta", "meta", multiple=True, metavar="K=V",
+    help="Frontmatter equality filter (repeatable).",
+)
+@click.option(
+    "--before", multiple=True, metavar="K=V",
+    help="Inclusive upper bound on a frontmatter field (dates/numbers).",
+)
+@click.option(
+    "--after", multiple=True, metavar="K=V",
+    help="Inclusive lower bound on a frontmatter field (dates/numbers).",
+)
+@click.option("--json", "as_json", is_flag=True, help="Emit JSON instead of text.")
+def pages_cmd(
+    kind: str | None,
+    meta: tuple[str, ...],
+    before: tuple[str, ...],
+    after: tuple[str, ...],
+    as_json: bool,
+) -> None:
+    """List pages, optionally filtered by kind and frontmatter.
+
+    Examples: `vouch pages --kind followup --meta followup_status=open
+    --before due_at=2026-07-10` lists open followups due by july 10.
+    """
+    store = _load_store()
+    try:
+        equals, lo, hi = parse_kv(meta), parse_kv(after), parse_kv(before)
+    except ValueError as e:
+        raise click.UsageError(str(e)) from e
+    hits = filter_pages(
+        store.list_pages(), kind=kind, equals=equals, before=hi, after=lo,
+    )
+    if as_json:
+        _emit_json(
+            [
+                {
+                    "id": p.id, "title": p.title, "type": p.type,
+                    "tags": p.tags, "metadata": p.metadata,
+                }
+                for p in hits
+            ]
+        )
+        return
+    for p in hits:
+        extras = " ".join(f"{k}={v}" for k, v in sorted(p.metadata.items()))
+        suffix = f"  ({extras})" if extras else ""
+        click.echo(f"{p.id}  [{p.type}]  {p.title}{suffix}")
+    if not hits:
+        click.echo("no matching pages")
 
 
 # --- proposals ------------------------------------------------------------
@@ -1389,6 +1521,7 @@ def schema_list_cmd(as_json: bool) -> None:
                 "required_fields": required,
                 "required_citations": citations,
                 "has_frontmatter_schema": bool(fm_schema),
+                "protected": registry.is_protected(name),
             }
         )
         extras: list[str] = []
@@ -1398,6 +1531,8 @@ def schema_list_cmd(as_json: bool) -> None:
             extras.append("citations-required")
         if fm_schema:
             extras.append("schema")
+        if registry.is_protected(name):
+            extras.append("protected")
         suffix = f"  ({'; '.join(extras)})" if extras else ""
         lines.append(f"{name}{suffix}")
     if as_json:
@@ -1517,6 +1652,47 @@ def source_add(path: str, title: str | None, url: str | None, source_type: str) 
     click.echo(src.id)
 
 
+@source.command("fetch")
+@click.argument("url")
+@click.option("--title", default=None)
+@click.option(
+    "--max-bytes",
+    default=fetch_mod.DEFAULT_MAX_BYTES,
+    show_default=True,
+    type=int,
+    help="Snapshot size cap.",
+)
+@click.option("--timeout", default=fetch_mod.DEFAULT_TIMEOUT, show_default=True, type=float)
+@click.option("--tag", "tags", multiple=True)
+def source_fetch(
+    url: str, title: str | None, max_bytes: int, timeout: float, tags: tuple[str, ...],
+) -> None:
+    """Fetch URL and register the exact bytes as a content-addressed Source.
+
+    Claims cite the immutable snapshot id, so the evidence a reviewer
+    approved against survives the live page drifting. http/https only;
+    hosts must resolve to public addresses; redirects are re-validated.
+    """
+    store = _load_store()
+    with _cli_errors():
+        src = fetch_mod.snapshot_url(
+            store,
+            url,
+            title=title,
+            tags=list(tags) or None,
+            max_bytes=max_bytes,
+            timeout=timeout,
+        )
+    audit_mod.log_event(
+        store.kb_dir,
+        event="source.fetch",
+        actor=_whoami(),
+        object_ids=[src.id],
+        data={"url": url},
+    )
+    click.echo(src.id)
+
+
 @source.command("verify")
 @click.option("--fail-on-issue", is_flag=True)
 def source_verify(fail_on_issue: bool) -> None:
@@ -1532,6 +1708,77 @@ def source_verify(fail_on_issue: bool) -> None:
             f"external={vr.external_status}  {vr.source.locator}"
         )
     if fail_on_issue and bad:
+        sys.exit(1)
+
+
+@cli.command(name="inbox")
+@click.option(
+    "--dir", "directory", required=True,
+    type=click.Path(exists=True, file_okay=False),
+    help="Folder to scan (must live under the project root).",
+)
+@click.option("--watch", "watch_mode", is_flag=True, help="Poll instead of a single pass.")
+@click.option(
+    "--poll-interval",
+    default=inbox_mod.DEFAULT_POLL_INTERVAL,
+    show_default=True,
+    type=float,
+)
+@click.option("--once", is_flag=True, help="Single tick even under --watch (test/ci bound).")
+def inbox_cmd(directory: str, watch_mode: bool, poll_interval: float, once: bool) -> None:
+    """Scan an inbox folder: each new file becomes a registered source plus
+    one pending page proposal. Proposes only — a human still approves."""
+    store = _load_store()
+    path = Path(directory)
+    with _cli_errors():
+        if watch_mode and not once:
+            def _report(res: inbox_mod.ScanResult) -> None:
+                if res.proposed:
+                    click.echo(f"filed {len(res.proposed)} proposal(s): {', '.join(res.proposed)}")
+
+            with suppress(KeyboardInterrupt):
+                inbox_mod.watch(
+                    store, path, poll_interval=poll_interval, on_result=_report,
+                )
+            return
+        res = inbox_mod.scan(store, path)
+    click.echo(f"filed {len(res.proposed)} proposal(s); skipped {len(res.skipped)} file(s)")
+    for pid in res.proposed:
+        click.echo(f"  {pid}")
+
+
+@cli.group()
+def notify() -> None:
+    """Outbound reviewer notification webhooks (config: notify.webhooks)."""
+
+
+@notify.command("sweep")
+def notify_sweep() -> None:
+    """Evaluate pending-queue triggers and fire configured webhooks.
+
+    Idempotent per (event, proposal) — safe to run from cron. Read-and-
+    notify only: nothing here can propose, approve, or edit."""
+    store = _load_store()
+    with _cli_errors():
+        fired = notify_mod.sweep(store)
+    if fired:
+        click.echo(f"fired {len(fired)} event(s): {', '.join(fired)}")
+    else:
+        click.echo("nothing to fire")
+
+
+@notify.command("test")
+@click.option("--url", required=True)
+@click.option("--secret", default=None, help="Optional hmac secret (or env:VAR).")
+def notify_test(url: str, secret: str | None) -> None:
+    """Send a synthetic event to URL and report delivery."""
+    resolved = None
+    if secret:
+        with _cli_errors():
+            resolved = notify_mod._resolve_env(secret, what="--secret")
+    ok = notify_mod.send_test(url, secret=resolved)
+    click.echo("delivered" if ok else "delivery failed")
+    if not ok:
         sys.exit(1)
 
 
@@ -1718,9 +1965,12 @@ def capture_finalize_cmd(session_id: str | None) -> None:
     if store is None:
         return
     cwd = Path(str(payload.get("cwd") or ".")).resolve()
+    transcript_raw = payload.get("transcript_path")
+    transcript = Path(str(transcript_raw)) if transcript_raw else None
     result = capture_mod.finalize(
         store, sid, cwd=cwd, project=cwd.name,
         generated_at=datetime.now(UTC).isoformat(),
+        transcript_path=transcript,
     )
     _emit_json(result)
 

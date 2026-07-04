@@ -22,9 +22,14 @@ MANIFEST_PATH = REPO_ROOT / "openclaw.plugin.json"
 PACKAGE_JSON_PATH = REPO_ROOT / "package.json"
 EXTENSION_PATH = REPO_ROOT / "adapters" / "openclaw" / "vouch-context-engine.mjs"
 SKILL_NAMES = (
+    "vouch-ask",
+    "vouch-followup",
     "vouch-propose-from-pr",
     "vouch-recall",
+    "vouch-record",
+    "vouch-remember",
     "vouch-resolve-issue",
+    "vouch-standup",
     "vouch-status",
 )
 
