@@ -277,8 +277,17 @@ def test_first_user_prompt_skips_host_wrappers(tmp_path: Path) -> None:
     transcript = tmp_path / "t.jsonl"
     lines = [
         {"type": "queue-operation", "operation": "enqueue"},
-        {"type": "user", "message": {"role": "user", "content": "<command-name>/model</command-name>"}},
-        {"type": "user", "message": {"role": "user", "content": "<local-command-stdout>ok</local-command-stdout>"}},
+        {
+            "type": "user",
+            "message": {"role": "user", "content": "<command-name>/model</command-name>"},
+        },
+        {
+            "type": "user",
+            "message": {
+                "role": "user",
+                "content": "<local-command-stdout>ok</local-command-stdout>",
+            },
+        },
         {"type": "user", "isMeta": True, "message": {"role": "user", "content": "meta noise"}},
         {"type": "user", "message": {"role": "user", "content": [
             {"type": "text", "text": "  please add   retry logic\nto the fetcher  "},
