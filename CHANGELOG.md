@@ -6,6 +6,27 @@ All notable changes to vouch are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+- company-brain template: `vouch init --template company-brain` declares
+  typed record kinds (contact, org, project-record, meeting-notes, followup,
+  decision-record, voice) as `page_kinds` config and seeds a cited guide
+  page. operator-declared kinds always win; the merge is additive and
+  idempotent. see `docs/company-brain.md`.
+- `vouch init --template <name>` dispatches the onboarding template registry
+  (starter stays the default; templates layer on top of it).
+- frontmatter filters on `kb.list_pages` across mcp/jsonl/cli: kind equality,
+  field equality, and inclusive ordered bounds (numbers, iso dates), plus the
+  `vouch pages` human mirror. a viewport over `store.list_pages()`, not a
+  query language.
+- `kb.digest` / `vouch digest`: read-only reviewer briefing — pending
+  proposals oldest-first, recent decisions, stale claims, followups due, and
+  citation coverage. `--format text|json|markdown`; writes nothing, so it is
+  safe to run from cron.
+- five company-brain slash commands in the claude-code adapter (mirrored to
+  the plugin skills list): `/vouch-ask`, `/vouch-remember`, `/vouch-record`,
+  `/vouch-followup`, `/vouch-standup`. every flow terminates at
+  `kb_propose_*` — none may call `kb_approve`.
+
 ## [1.1.0] — 2026-07-03
 
 ### Added
