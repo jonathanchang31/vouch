@@ -8,10 +8,11 @@ documentation, submitted for issue [#338](https://github.com/vouchdev/vouch/issu
 - **Host:** Claude Code, driving the real `vouch` CLI (v1.1.0) directly —
   `vouch init`, `vouch source add`, `vouch propose-claim`, `vouch approve`,
   `vouch propose-page`, `vouch reindex`, `vouch doctor`.
-- **What it's used for:** every open issue on `vouchdev/vouch` (93 at audit
-  time) was checked against `git log --grep` on `upstream/main` and
-  `upstream/test` for a commit resolving it, then spot-checked by reading the
-  relevant source directly. 13 of the resulting findings are proposed claims,
+- **What it's used for:** every open issue on `vouchdev/vouch` not already
+  linked from another in-flight open PR (61 of 93 open issues at audit time)
+  was checked against `git log --grep` on `upstream/main` and `upstream/test`
+  for a commit resolving it, then spot-checked by reading the relevant source
+  directly. 13 of the resulting findings are proposed claims,
   each cited to a source file containing the real evidence (a `git log`
   transcript, a code excerpt, or an actual maintainer PR-review comment
   copied from GitHub). A 14th finding — a real bug in `vouch source add

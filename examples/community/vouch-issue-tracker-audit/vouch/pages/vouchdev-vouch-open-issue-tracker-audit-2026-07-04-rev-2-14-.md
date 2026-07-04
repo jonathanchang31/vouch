@@ -27,12 +27,13 @@ updated_at: '2026-07-04T06:24:49.036285Z'
 ---
 ## Method
 
-Every open issue in `vouchdev/vouch` (93 at audit time) was cross-referenced
-against `git log --grep` on `upstream/main` and `upstream/test` for a commit
+All open issues in `vouchdev/vouch` not already linked from an in-flight
+open PR (61 of 93 open issues at audit time) were cross-referenced against
+`git log --grep` on `upstream/main` and `upstream/test` for a commit
 mentioning that issue number, then spot-checked by reading the relevant
 source file directly (not just trusting the commit message). Issues already
-linked from an in-flight open PR were excluded up front, since those aren't
-stale — they're just not merged yet.
+tied to another open PR were excluded up front, since those aren't stale —
+they're just not merged yet.
 
 ## Findings
 
@@ -53,11 +54,15 @@ stale — they're just not merged yet.
 | [#168](https://github.com/vouchdev/vouch/issues/168) | cross-agent approval bypass | **still unfixed**, security-relevant |
 | — | `vouch source add --url` is a no-op | **self-found bug**, see below |
 
-11 of these 13 issues describe bugs or features that are already resolved in
+9 of these 13 issues describe bugs or features that are already resolved in
 code but left open on GitHub — likely because merges to non-default branches
-(or squash-merge commits) don't trigger GitHub's auto-close. One (#189) is a
-genuinely open, unclaimed implementation gap behind a drafted VEP. One (#168)
-is a real, unfixed, security-relevant bug with a maintainer review already on
+(or squash-merge commits) don't trigger GitHub's auto-close. Two more are
+only partially addressed: #54's epic has one track (CLI output) shipped but
+its other tracks are still open, and #100's VEP-0005 document was drafted
+but the (visibility, project, agent) scoping feature it describes was never
+built. One (#189) is a genuinely open, unclaimed implementation gap — the
+tracking issue for that same undelivered VEP-0005 feature. One (#168) is a
+real, unfixed, security-relevant bug with a maintainer review already on
 record (from a prior closed PR) describing exactly what a correct fix needs
 to do.
 
