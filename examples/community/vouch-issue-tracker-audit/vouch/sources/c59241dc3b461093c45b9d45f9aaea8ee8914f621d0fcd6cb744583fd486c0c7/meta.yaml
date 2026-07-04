@@ -1,0 +1,15 @@
+id: c59241dc3b461093c45b9d45f9aaea8ee8914f621d0fcd6cb744583fd486c0c7
+type: issue
+locator: https://github.com/vouchdev/vouch/issues/94
+title: 'vouchdev/vouch issue #94 + fix commit 2827a74'
+hash: c59241dc3b461093c45b9d45f9aaea8ee8914f621d0fcd6cb744583fd486c0c7
+immutable: true
+scope:
+  visibility: project
+  project: null
+  agent: null
+byte_size: 656
+media_type: text/plain
+created_at: '2026-07-04T06:10:55.377988Z'
+metadata: {}
+tags: []

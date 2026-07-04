@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1594" height="272" viewBox="0 0 1594 272" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="14">
+<rect width="1594" height="272" rx="8" fill="#0d1117"/>
+<rect width="1594" height="36" rx="8" fill="#161b22"/>
+<rect y="28" width="1594" height="8" fill="#161b22"/>
+<circle cx="16" cy="18" r="6" fill="#ff5f56"/>
+<circle cx="34" cy="18" r="6" fill="#ffbd2e"/>
+<circle cx="52" cy="18" r="6" fill="#27c93f"/>
+<text x="797.0" y="23" fill="#8b949e" text-anchor="middle">vouch-issue-tracker-audit/ — vouch audit --tail 10</text>
+<text x="16" y="52" fill="#7ee787" xml:space="preserve">$ vouch audit --tail 10</text>
+<text x="16" y="72" fill="#c9d1d9" xml:space="preserve">2026-07-04T06:17:24.668152+00:00  proposal.page.approve           by jonathanchang31  objects=['20260704-061640-20537c0f', 'vouchdev-vouch-open-issue-tracker-audit-2026-07-04']</text>
+<text x="16" y="92" fill="#c9d1d9" xml:space="preserve">2026-07-04T06:17:37.109152+00:00  source.verify                   by vouch-verify  objects=[]</text>
+<text x="16" y="112" fill="#c9d1d9" xml:space="preserve">2026-07-04T06:22:08.321798+00:00  source.add                      by claude-code-audit  objects=['14ec6e206005e19431aec8e26d7f44935c4e031c535c9848c80ff9e88df13ecd']</text>
+<text x="16" y="132" fill="#c9d1d9" xml:space="preserve">2026-07-04T06:22:09.353069+00:00  proposal.claim.create           by claude-code-audit  objects=['20260704-062209-21e9b7a4']</text>
+<text x="16" y="152" fill="#c9d1d9" xml:space="preserve">2026-07-04T06:22:11.611776+00:00  proposal.claim.approve          by jonathanchang31  objects=['20260704-062209-21e9b7a4', 'vouchdev-vouch-s-cli-vouch-source-add-path-url-url-silently-']</text>
+<text x="16" y="172" fill="#c9d1d9" xml:space="preserve">2026-07-04T06:22:47.109098+00:00  source.verify                   by vouch-verify  objects=[]</text>
+<text x="16" y="192" fill="#c9d1d9" xml:space="preserve">2026-07-04T06:22:51.574949+00:00  source.verify                   by vouch-verify  objects=[]</text>
+<text x="16" y="212" fill="#c9d1d9" xml:space="preserve">2026-07-04T06:24:48.022905+00:00  proposal.page.create            by claude-code-audit  objects=['20260704-062448-4d9f894f']</text>
+<text x="16" y="232" fill="#c9d1d9" xml:space="preserve">2026-07-04T06:24:49.072776+00:00  proposal.page.approve           by jonathanchang31  objects=['20260704-062448-4d9f894f', 'vouchdev-vouch-open-issue-tracker-audit-2026-07-04-rev-2-14-']</text>
+<text x="16" y="252" fill="#c9d1d9" xml:space="preserve">2026-07-04T06:24:59.488805+00:00  source.verify                   by vouch-verify  objects=[]</text>
+</svg>

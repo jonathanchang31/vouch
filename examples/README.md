@@ -57,6 +57,17 @@ The snapshot KBs ship with everything already in `claims/`, `pages/`,
 etc. — they're "post-approval" snapshots. There are no `proposed/`
 entries because proposals are local-only by nature.
 
+## Community examples
+
+Real vouch KBs from real use, submitted per [issue #338](https://github.com/vouchdev/vouch/issues/338).
+Unlike the shipped snapshots above, these aren't required to be
+byte-for-byte re-renderable — just honest: every claim traceable through
+`audit.log.jsonl` to an actual `propose → approve` decision.
+
+| Example | Topic | Size |
+|---|---|---|
+| [community/vouch-issue-tracker-audit/](community/vouch-issue-tracker-audit/) | A codebase-hygiene audit of vouchdev/vouch's own open-issue tracker — which open issues are already fixed upstream, which are genuinely open, and one live security bug found along the way | 15 claims, 3 pages, 15 sources |
+
 ## Runnable flows
 
 Each of these is a script that builds a throwaway KB in `$(mktemp -d)`,

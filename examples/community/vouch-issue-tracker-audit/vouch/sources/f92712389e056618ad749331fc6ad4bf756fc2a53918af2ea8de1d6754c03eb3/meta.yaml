@@ -1,0 +1,15 @@
+id: f92712389e056618ad749331fc6ad4bf756fc2a53918af2ea8de1d6754c03eb3
+type: issue
+locator: https://github.com/vouchdev/vouch/issues/95
+title: 'vouchdev/vouch issue #95 + fix commit 1af9521'
+hash: f92712389e056618ad749331fc6ad4bf756fc2a53918af2ea8de1d6754c03eb3
+immutable: true
+scope:
+  visibility: project
+  project: null
+  agent: null
+byte_size: 561
+media_type: text/plain
+created_at: '2026-07-04T06:10:58.611868Z'
+metadata: {}
+tags: []

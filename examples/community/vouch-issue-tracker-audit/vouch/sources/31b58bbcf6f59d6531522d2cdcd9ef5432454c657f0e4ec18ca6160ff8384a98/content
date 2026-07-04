@@ -1,0 +1,19 @@
+# vouchdev/vouch issue #54
+
+Title: epic: make vouch friendlier and more useful out of the box
+Author: plind-junior (COLLABORATOR)
+State on GitHub at audit time: OPEN
+
+## Fix commit found on upstream/main
+
+a5f074f754a2005c0eca8db636a00943ccb823d1  2026-05-26
+feat(cli): colourise output, add --json to lint/search, progress on long ops (#54)
+
+Verified with:
+  $ git log --oneline -E --grep="#54([^0-9]|$)" upstream/main
+  a5f074f feat(cli): colourise output, add --json to lint/search, progress on long ops (#54)
+
+Conclusion: Track 2 (Friendlier CLI output) of this epic landed on main.
+The issue references a multi-track epic body; only the CLI-output track's
+commit was checked for this claim (see the "still open" caveat in the claim
+rationale).

@@ -1,0 +1,24 @@
+id: 20260704-061056-e8724ce8
+kind: claim
+proposed_by: claude-code-audit
+session_id: null
+proposed_at: '2026-07-04T06:10:56.781019Z'
+payload:
+  id: vouchdev-vouch-issue-94-feat-http-transport-for-vouch-serve-
+  text: 'vouchdev/vouch issue #94 (feat: HTTP transport for vouch serve, tagged [VEP])
+    is fixed on main by commit 2827a74 ''feat(serve): add HTTP transport for vouch
+    serve --transport http (#94)'', but the GitHub issue is still open.'
+  type: finding
+  confidence: 0.85
+  evidence:
+  - c59241dc3b461093c45b9d45f9aaea8ee8914f621d0fcd6cb744583fd486c0c7
+  entities: []
+  tags:
+  - stale-issue
+  - codebase-audit
+rationale: The [VEP] tag suggested this needed a design proposal first; it shipped
+  anyway, so either the VEP happened informally or the tag was aspirational.
+status: rejected
+decided_at: '2026-07-04T06:13:54.771085Z'
+decided_by: jonathanchang31
+decision_reason: invalid claim type 'finding' - resubmitting with valid type 'fact'

@@ -1,0 +1,53 @@
+# vouchdev/vouch: `vouch source add --url` is a no-op (found while building this KB)
+
+Not a filed GitHub issue — a bug surfaced by dogfooding vouch to build this
+very example.
+
+## What happened
+
+`vouch source add PATH --url URL` accepts `--url`, but the value is
+discarded. In `src/vouch/cli.py`, `source_add()` always calls:
+
+    src = store.put_source(
+        data,
+        title=title or Path(path).name,
+        url=url,
+        locator=str(Path(path).resolve()),   # <-- always non-None
+        source_type=source_type,
+    )
+
+and in `src/vouch/storage.py`, `KBStore.put_source()` resolves the stored
+`locator` field as:
+
+    locator=locator or url or title or sid,
+
+Because the CLI always passes a concrete `locator` (the resolved local
+file path), the `locator or url` fallback never reaches `url` — the CLI
+has no way to make `--url` observable in the stored Source's `locator`
+field, no matter what a caller passes.
+
+## Reproduction (this exact KB)
+
+    $ vouch source add evidence/issue-168.md \
+        --title "vouchdev/vouch issue #168 + closed PR #169 (unmerged)" \
+        --url "https://github.com/vouchdev/vouch/issues/168"
+    77cf22c12729473bdd16015f273b9b7159500a6529a43e9f61910615e9fcc5dc
+
+    $ cat .vouch/sources/77cf.../meta.yaml
+    locator: /tmp/.../evidence/issue-168.md      # the --url value is nowhere in this file
+
+## Impact
+
+Low severity, but real: any workflow that registers a source from a local
+file while also wanting to record its canonical URL (exactly the "cite the
+GitHub issue this file was copied from" pattern this community example
+needed) silently loses that URL. `store.put_source` does still accept a
+`url` kwarg — a library caller bypassing the CLI can set it — so the gap is
+specifically in `source_add()`'s CLI wiring, not the storage layer.
+
+## Suggested fix
+
+`src/vouch/cli.py::source_add` should pass `locator=locator_override or url
+or str(Path(path).resolve())` — i.e., prefer an explicit `--url` when given,
+falling back to the resolved path only when no URL was supplied. Today
+there's no `--locator` override either, so the resolved path always wins.

@@ -1,0 +1,26 @@
+id: vouchdev-vouch-issue-166-bundle-import-can-overwrite-the-aud
+text: 'vouchdev/vouch issue #166 (bundle import can overwrite the audit log) is fixed
+  and merged into both main and test via PR #183 (merge commit 6d53c99), after an
+  earlier attempt (PR #167) was closed for being retargeted to the wrong base branch.
+  The GitHub issue is still open.'
+type: fact
+status: working
+confidence: 0.95
+evidence:
+- 9e25d14157633c926abbd0cafd1cfff119d21ad266152b7b7e49d7288b77b292
+entities: []
+supersedes: []
+superseded_by: null
+contradicts: []
+scope:
+  visibility: project
+  project: null
+  agent: null
+tags:
+- stale-issue
+- codebase-audit
+- security
+created_at: '2026-07-04T06:15:29.739373Z'
+updated_at: '2026-07-04T06:15:29.739380Z'
+last_confirmed_at: null
+approved_by: jonathanchang31

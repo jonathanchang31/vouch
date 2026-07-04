@@ -1,0 +1,15 @@
+id: c295fcf5b9d4f52a91667e3b65f9fd242b760401df36fb88b0a6ba9fb7a0e424
+type: issue
+locator: https://github.com/vouchdev/vouch/issues/80
+title: 'vouchdev/vouch issue #80 + fix commit f558fd0'
+hash: c295fcf5b9d4f52a91667e3b65f9fd242b760401df36fb88b0a6ba9fb7a0e424
+immutable: true
+scope:
+  visibility: project
+  project: null
+  agent: null
+byte_size: 624
+media_type: text/plain
+created_at: '2026-07-04T06:10:39.004547Z'
+metadata: {}
+tags: []

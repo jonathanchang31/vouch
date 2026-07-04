@@ -1,0 +1,24 @@
+id: vouchdev-vouch-issue-94-feat-http-transport-for-vouch-serve-
+text: 'vouchdev/vouch issue #94 (feat: HTTP transport for vouch serve, tagged [VEP])
+  is fixed on main by commit 2827a74 ''feat(serve): add HTTP transport for vouch serve
+  --transport http (#94)'', but the GitHub issue is still open.'
+type: fact
+status: working
+confidence: 0.85
+evidence:
+- c59241dc3b461093c45b9d45f9aaea8ee8914f621d0fcd6cb744583fd486c0c7
+entities: []
+supersedes: []
+superseded_by: null
+contradicts: []
+scope:
+  visibility: project
+  project: null
+  agent: null
+tags:
+- stale-issue
+- codebase-audit
+created_at: '2026-07-04T06:15:29.020028Z'
+updated_at: '2026-07-04T06:15:29.020035Z'
+last_confirmed_at: null
+approved_by: jonathanchang31

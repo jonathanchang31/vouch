@@ -1,0 +1,18 @@
+# vouchdev/vouch issue #80
+
+Title: bug: import_check accepts bundles whose manifest lists files missing
+       from the tarball (no issue raised)
+Author: galuis116
+State on GitHub at audit time: OPEN
+
+## Fix commit found on upstream/main
+
+f558fd0fdc5fb071cca34f941be7ee522b03104f  2026-05-25
+fix(bundle): reject import of bundles whose manifest lists files missing
+from tarball (#80)
+
+Verified with:
+  $ git log --oneline -E --grep="#80([^0-9]|$)" upstream/main
+  f558fd0 fix(bundle): reject import of bundles whose manifest lists files missing from tarball (#80)
+
+Conclusion: fixed on main. The GitHub issue is still open.

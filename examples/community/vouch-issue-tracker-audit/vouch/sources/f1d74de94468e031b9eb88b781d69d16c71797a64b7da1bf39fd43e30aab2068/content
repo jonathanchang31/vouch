@@ -1,0 +1,21 @@
+# vouchdev/vouch issue #93
+
+Title: feat: `vouch approve --batch` for scriptable bulk approval
+Author: plind-junior (COLLABORATOR)
+State on GitHub at audit time: OPEN
+
+## Fix commit found on upstream/main
+
+e7df0475328cdecf4918983cec6c127e4553b7e3  2026-05-26
+feat(cli): vouch approve accepts multiple ids for scriptable bulk approval (#93)
+
+Verified with:
+  $ git log --oneline -E --grep="#93([^0-9]|$)" upstream/main
+  e7df047 feat(cli): vouch approve accepts multiple ids for scriptable bulk approval (#93)
+
+Corroborated by `vouch approve --help` on the installed 1.1.0 CLI:
+"Pass several ids to approve a batch in one call ... One audit event is
+recorded per approved artifact." Both --keep-going (best-effort) and the
+default all-or-nothing precheck are implemented.
+
+Conclusion: fixed on main. The GitHub issue is still open.

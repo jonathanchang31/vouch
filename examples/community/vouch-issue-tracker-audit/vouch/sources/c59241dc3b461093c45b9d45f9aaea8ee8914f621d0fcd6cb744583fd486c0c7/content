@@ -1,0 +1,18 @@
+# vouchdev/vouch issue #94
+
+Title: feat: HTTP transport for `vouch serve` (`--transport http`) [VEP]
+Author: plind-junior (COLLABORATOR)
+State on GitHub at audit time: OPEN
+
+## Fix commit found on upstream/main
+
+2827a7491a7816a1b1f2e325478237d0ef99df28  2026-05-28
+feat(serve): add HTTP transport for vouch serve --transport http (#94)
+
+Verified with:
+  $ git log --oneline -E --grep="#94([^0-9]|$)" upstream/main
+  2827a74 feat(serve): add HTTP transport for vouch serve --transport http (#94)
+
+Conclusion: fixed on main, despite the [VEP] tag in the issue title (a VEP
+was apparently handled inline rather than blocking). The GitHub issue is
+still open.

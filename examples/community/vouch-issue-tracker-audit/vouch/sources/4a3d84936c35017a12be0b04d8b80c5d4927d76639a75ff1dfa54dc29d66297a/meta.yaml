@@ -1,0 +1,15 @@
+id: 4a3d84936c35017a12be0b04d8b80c5d4927d76639a75ff1dfa54dc29d66297a
+type: issue
+locator: https://github.com/vouchdev/vouch/issues/81
+title: 'vouchdev/vouch issue #81 + fix commit ab54194'
+hash: 4a3d84936c35017a12be0b04d8b80c5d4927d76639a75ff1dfa54dc29d66297a
+immutable: true
+scope:
+  visibility: project
+  project: null
+  agent: null
+byte_size: 725
+media_type: text/plain
+created_at: '2026-07-04T06:10:41.809515Z'
+metadata: {}
+tags: []

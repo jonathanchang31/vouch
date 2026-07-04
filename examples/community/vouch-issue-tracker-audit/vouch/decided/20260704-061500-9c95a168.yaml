@@ -1,0 +1,28 @@
+id: 20260704-061500-9c95a168
+kind: claim
+proposed_by: claude-code-audit
+session_id: null
+proposed_at: '2026-07-04T06:15:00.108536Z'
+payload:
+  id: vouchdev-vouch-issue-100-feat-richer-scopes-on-claim-source-
+  text: 'vouchdev/vouch issue #100 (feat: richer scopes on Claim/Source [VEP]) is
+    resolved on main only in the narrow sense that commit 0dba232 added the VEP-0005
+    proposal document. The actual (visibility, project, agent) scoping feature it
+    describes is tracked separately as issue #189, which has no matching commit on
+    main or test as of this audit.'
+  type: fact
+  confidence: 0.85
+  evidence:
+  - f549fefbc32557f0f4b55ba774968ba5e4f4296022d49ac0fd2974467d2605c7
+  entities: []
+  tags:
+  - codebase-audit
+  - vep-tracking
+rationale: 'Distinguishing ''the VEP was written'' from ''the feature was built''
+  avoids a false-positive stale-issue call on #100 and correctly leaves #189 flagged
+  as genuinely open.'
+status: approved
+decided_at: '2026-07-04T06:15:29.296336Z'
+decided_by: jonathanchang31
+decision_reason: 'Verified against live vouchdev/vouch repo state (git log, direct
+  source reads, GitHub API) during a codebase-hygiene audit for issue #338.'

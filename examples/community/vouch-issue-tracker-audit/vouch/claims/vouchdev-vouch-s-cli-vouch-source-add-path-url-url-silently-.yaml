@@ -1,0 +1,29 @@
+id: vouchdev-vouch-s-cli-vouch-source-add-path-url-url-silently-
+text: 'vouchdev/vouch''s CLI: ''vouch source add PATH --url URL'' silently drops --url.
+  cli.py::source_add always passes an explicit locator=str(Path(path).resolve()) into
+  store.put_source(), and storage.py''s locator=locator or url or title or sid never
+  falls through to url as a result. Found while building this very KB: every source
+  below had to have its locator hand-corrected post-hoc from a local scratch path
+  to its real GitHub URL.'
+type: fact
+status: working
+confidence: 0.95
+evidence:
+- 14ec6e206005e19431aec8e26d7f44935c4e031c535c9848c80ff9e88df13ecd
+entities: []
+supersedes: []
+superseded_by: null
+contradicts: []
+scope:
+  visibility: project
+  project: null
+  agent: null
+tags:
+- live-bug
+- codebase-audit
+- dogfooding
+- needs-pr
+created_at: '2026-07-04T06:22:11.419605Z'
+updated_at: '2026-07-04T06:22:11.419611Z'
+last_confirmed_at: null
+approved_by: jonathanchang31

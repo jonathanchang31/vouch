@@ -1,0 +1,20 @@
+# vouchdev/vouch issue #76
+
+Title: bug: crystallize writes a durable Page bypassing the review gate;
+       body embeds agent-controlled markdown verbatim
+Author: galuis116
+State on GitHub at audit time: OPEN
+
+## Fix commit found on upstream/main
+
+cdf72ab5940d366775f7a83fe078bc5db8733fb4  2026-05-25
+fix(sessions): close crystallize review-gate bypass via summary page (#76)
+
+Verified with:
+  $ git log --oneline -E --grep="#76([^0-9]|$)" upstream/main
+  cdf72ab fix(sessions): close crystallize review-gate bypass via summary page (#76)
+
+Conclusion: the review-gate bypass described in the issue (session.crystallize
+promoting agent-supplied task/note text into a durable page without going
+through propose_page + approve) is fixed on main. The GitHub issue is still
+open.

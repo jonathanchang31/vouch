@@ -6,6 +6,13 @@ All notable changes to vouch are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+- `examples/community/vouch-issue-tracker-audit/`: a community example KB
+  (issue #338) auditing vouchdev/vouch's own open-issue tracker for
+  staleness — which open issues are already fixed upstream and which are
+  genuinely open, plus one live security bug (#168) and one bug in `vouch
+  source add --url` found while building the KB.
+
 ## [1.1.0] — 2026-07-03
 
 ### Added

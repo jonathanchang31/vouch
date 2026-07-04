@@ -1,0 +1,25 @@
+id: vouchdev-vouch-issue-54-epic-make-vouch-friendlier-and-more-
+text: 'vouchdev/vouch issue #54 (epic: make vouch friendlier and more useful out of
+  the box) is still open on GitHub, but its CLI-output track landed on main via commit
+  a5f074f ''feat(cli): colourise output, add --json to lint/search, progress on long
+  ops (#54)''.'
+type: fact
+status: working
+confidence: 0.9
+evidence:
+- 31b58bbcf6f59d6531522d2cdcd9ef5432454c657f0e4ec18ca6160ff8384a98
+entities: []
+supersedes: []
+superseded_by: null
+contradicts: []
+scope:
+  visibility: project
+  project: null
+  agent: null
+tags:
+- stale-issue
+- codebase-audit
+created_at: '2026-07-04T06:15:27.916862Z'
+updated_at: '2026-07-04T06:15:27.916869Z'
+last_confirmed_at: null
+approved_by: jonathanchang31

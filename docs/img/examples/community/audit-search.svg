@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1493" height="132" viewBox="0 0 1493 132" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="14">
+<rect width="1493" height="132" rx="8" fill="#0d1117"/>
+<rect width="1493" height="36" rx="8" fill="#161b22"/>
+<rect y="28" width="1493" height="8" fill="#161b22"/>
+<circle cx="16" cy="18" r="6" fill="#ff5f56"/>
+<circle cx="34" cy="18" r="6" fill="#ffbd2e"/>
+<circle cx="52" cy="18" r="6" fill="#27c93f"/>
+<text x="746.5" y="23" fill="#8b949e" text-anchor="middle">vouch-issue-tracker-audit/ — vouch search cross-agent</text>
+<text x="16" y="52" fill="#7ee787" xml:space="preserve">$ vouch search cross-agent</text>
+<text x="16" y="72" fill="#c9d1d9" xml:space="preserve">claim/vouchdev-vouch-issue-168-critical-agent-transport-allows-cro	…agent transport allows «cross-agent» approval) is still unfixed on both main and test: kb.approve…  (fts5)</text>
+<text x="16" y="92" fill="#c9d1d9" xml:space="preserve">page/vouchdev-vouch-open-issue-tracker-audit-2026-07-04	vouchdev/vouch open-issue tracker audit — 2026-07-04  (fts5)</text>
+<text x="16" y="112" fill="#c9d1d9" xml:space="preserve">page/vouchdev-vouch-open-issue-tracker-audit-2026-07-04-rev-2-14-	vouchdev/vouch open-issue tracker audit — 2026-07-04 (rev 2, 14 findings)  (fts5)</text>
+</svg>

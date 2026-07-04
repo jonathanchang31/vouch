@@ -1,0 +1,15 @@
+id: e55c1e956d0b08b2244e59290f01e29d2b51b8873a328bf4d5475873fb3e326d
+type: issue
+locator: https://github.com/vouchdev/vouch/issues/92
+title: 'vouchdev/vouch issue #92 + fix commit fb4b326'
+hash: e55c1e956d0b08b2244e59290f01e29d2b51b8873a328bf4d5475873fb3e326d
+immutable: true
+scope:
+  visibility: project
+  project: null
+  agent: null
+byte_size: 828
+media_type: text/plain
+created_at: '2026-07-04T06:10:44.961349Z'
+metadata: {}
+tags: []

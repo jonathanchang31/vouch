@@ -1,0 +1,23 @@
+# vouchdev/vouch issue #78
+
+Title: bug: kb.context returns archived/superseded claims; lifecycle
+       mutations never re-index FTS5 status
+Author: galuis116
+State on GitHub at audit time: OPEN
+
+## Fix commit found on upstream/main
+
+0708c743ea2aacea1e820c8be60ceac0fd563dc7  2026-05-25
+fix(context,storage): exclude retracted claims from kb.context and reindex
+FTS5 on update (#78)
+
+Verified with:
+  $ git log --oneline -E --grep="#78([^0-9]|$)" upstream/main
+  0708c74 fix(context,storage): exclude retracted claims from kb.context and reindex FTS5 on update (#78)
+
+Corroborated by reading src/vouch/context.py directly: `_RETRACTED_CLAIM_STATUSES`
+(ARCHIVED, SUPERSEDED, REDACTED) is defined and referenced as a filter, with a
+comment: "Any retrieval surface that hands knowledge back to an agent must
+exclude these — otherwise the archive/supersede/redact controls are decorative."
+
+Conclusion: fixed on main. The GitHub issue is still open.

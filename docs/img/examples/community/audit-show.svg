@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="788" height="712" viewBox="0 0 788 712" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="14">
+<rect width="788" height="712" rx="8" fill="#0d1117"/>
+<rect width="788" height="36" rx="8" fill="#161b22"/>
+<rect y="28" width="788" height="8" fill="#161b22"/>
+<circle cx="16" cy="18" r="6" fill="#ff5f56"/>
+<circle cx="34" cy="18" r="6" fill="#ffbd2e"/>
+<circle cx="52" cy="18" r="6" fill="#27c93f"/>
+<text x="394.0" y="23" fill="#8b949e" text-anchor="middle">vouch-issue-tracker-audit/ — vouch show (issue #168 finding)</text>
+<text x="16" y="52" fill="#7ee787" xml:space="preserve">$ vouch show 20260704-061515-0e132b51</text>
+<text x="16" y="72" fill="#c9d1d9" xml:space="preserve">id: 20260704-061515-0e132b51</text>
+<text x="16" y="92" fill="#c9d1d9" xml:space="preserve">kind: claim</text>
+<text x="16" y="112" fill="#c9d1d9" xml:space="preserve">proposed_by: claude-code-audit</text>
+<text x="16" y="132" fill="#c9d1d9" xml:space="preserve">session_id: null</text>
+<text x="16" y="152" fill="#c9d1d9" xml:space="preserve">proposed_at: '2026-07-04T06:15:15.581538Z'</text>
+<text x="16" y="172" fill="#c9d1d9" xml:space="preserve">payload:</text>
+<text x="16" y="192" fill="#c9d1d9" xml:space="preserve">  id: vouchdev-vouch-issue-168-critical-agent-transport-allows-cro</text>
+<text x="16" y="212" fill="#c9d1d9" xml:space="preserve">  text: 'vouchdev/vouch issue #168 (critical: agent transport allows cross-agent approval)</text>
+<text x="16" y="232" fill="#c9d1d9" xml:space="preserve">    is still unfixed on both main and test: kb.approve/kb.reject are registered on</text>
+<text x="16" y="252" fill="#c9d1d9" xml:space="preserve">    the JSONL transport with no expose_decision_tools trust gate, and the only check</text>
+<text x="16" y="272" fill="#c9d1d9" xml:space="preserve">    is same-agent self-approval. A prior fix (PR #169) was closed unmerged after a</text>
+<text x="16" y="292" fill="#c9d1d9" xml:space="preserve">    maintainer requested changes: remove the duplicated handle_request guard whose</text>
+<text x="16" y="312" fill="#c9d1d9" xml:space="preserve">    broad except-Exception swallows real errors, and document or remove the undocumented</text>
+<text x="16" y="332" fill="#c9d1d9" xml:space="preserve">    approver_role: trusted-agent bypass.'</text>
+<text x="16" y="352" fill="#c9d1d9" xml:space="preserve">  type: fact</text>
+<text x="16" y="372" fill="#c9d1d9" xml:space="preserve">  confidence: 0.95</text>
+<text x="16" y="392" fill="#c9d1d9" xml:space="preserve">  evidence:</text>
+<text x="16" y="412" fill="#c9d1d9" xml:space="preserve">  - 77cf22c12729473bdd16015f273b9b7159500a6529a43e9f61910615e9fcc5dc</text>
+<text x="16" y="432" fill="#c9d1d9" xml:space="preserve">  entities: []</text>
+<text x="16" y="452" fill="#c9d1d9" xml:space="preserve">  tags:</text>
+<text x="16" y="472" fill="#c9d1d9" xml:space="preserve">  - live-bug</text>
+<text x="16" y="492" fill="#c9d1d9" xml:space="preserve">  - codebase-audit</text>
+<text x="16" y="512" fill="#c9d1d9" xml:space="preserve">  - security</text>
+<text x="16" y="532" fill="#c9d1d9" xml:space="preserve">  - needs-pr</text>
+<text x="16" y="552" fill="#c9d1d9" xml:space="preserve">rationale: 'The single actionable item in this audit: a real, reviewed-but-unmerged</text>
+<text x="16" y="572" fill="#c9d1d9" xml:space="preserve">  security gap, with the maintainer''s exact acceptance criteria already on record</text>
+<text x="16" y="592" fill="#c9d1d9" xml:space="preserve">  in PR #169.'</text>
+<text x="16" y="612" fill="#c9d1d9" xml:space="preserve">status: approved</text>
+<text x="16" y="632" fill="#c9d1d9" xml:space="preserve">decided_at: '2026-07-04T06:15:29.902048Z'</text>
+<text x="16" y="652" fill="#c9d1d9" xml:space="preserve">decided_by: jonathanchang31</text>
+<text x="16" y="672" fill="#c9d1d9" xml:space="preserve">decision_reason: 'Verified against live vouchdev/vouch repo state (git log, direct</text>
+<text x="16" y="692" fill="#c9d1d9" xml:space="preserve">  source reads, GitHub API) during a codebase-hygiene audit for issue #338.'</text>
+</svg>

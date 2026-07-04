@@ -1,0 +1,24 @@
+id: vouchdev-vouch-issue-80-import-check-accepts-bundles-whose-m
+text: 'vouchdev/vouch issue #80 (import_check accepts bundles whose manifest lists
+  files missing from the tarball) is fixed on main by commit f558fd0, but the GitHub
+  issue is still open.'
+type: fact
+status: working
+confidence: 0.9
+evidence:
+- c295fcf5b9d4f52a91667e3b65f9fd242b760401df36fb88b0a6ba9fb7a0e424
+entities: []
+supersedes: []
+superseded_by: null
+contradicts: []
+scope:
+  visibility: project
+  project: null
+  agent: null
+tags:
+- stale-issue
+- codebase-audit
+created_at: '2026-07-04T06:15:28.384912Z'
+updated_at: '2026-07-04T06:15:28.384921Z'
+last_confirmed_at: null
+approved_by: jonathanchang31

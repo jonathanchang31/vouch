@@ -1,0 +1,22 @@
+# vouchdev/vouch issue #92
+
+Title: bug: `_retrieve` ignores `retrieval.backends` config and hardcodes
+       embeddings-primary
+Author: plind-junior (COLLABORATOR)
+State on GitHub at audit time: OPEN
+
+## Fix commit found on upstream/main
+
+fb4b326254694645e255bc9884a877f42f287cfd  2026-05-26
+fix(context): honor retrieval.backend config instead of hardcoding
+embeddings (#92)
+
+Verified with:
+  $ git log --oneline -E --grep="#92([^0-9]|$)" upstream/main
+  fb4b326 fix(context): honor retrieval.backend config instead of hardcoding embeddings (#92)
+
+Corroborated by reading src/vouch/context.py directly: `_configured_backend()`
+reads `retrieval.backend` (with a legacy `retrieval.backends` list fallback)
+and `_retrieve()` branches on `auto|embedding|fts5|substring`.
+
+Conclusion: fixed on main. The GitHub issue is still open.

@@ -1,0 +1,26 @@
+id: vouchdev-vouch-issue-100-feat-richer-scopes-on-claim-source-
+text: 'vouchdev/vouch issue #100 (feat: richer scopes on Claim/Source [VEP]) is resolved
+  on main only in the narrow sense that commit 0dba232 added the VEP-0005 proposal
+  document. The actual (visibility, project, agent) scoping feature it describes is
+  tracked separately as issue #189, which has no matching commit on main or test as
+  of this audit.'
+type: fact
+status: working
+confidence: 0.85
+evidence:
+- f549fefbc32557f0f4b55ba774968ba5e4f4296022d49ac0fd2974467d2605c7
+entities: []
+supersedes: []
+superseded_by: null
+contradicts: []
+scope:
+  visibility: project
+  project: null
+  agent: null
+tags:
+- codebase-audit
+- vep-tracking
+created_at: '2026-07-04T06:15:29.270915Z'
+updated_at: '2026-07-04T06:15:29.270922Z'
+last_confirmed_at: null
+approved_by: jonathanchang31

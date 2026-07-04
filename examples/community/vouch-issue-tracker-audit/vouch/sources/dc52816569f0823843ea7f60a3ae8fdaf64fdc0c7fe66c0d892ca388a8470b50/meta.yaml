@@ -1,0 +1,15 @@
+id: dc52816569f0823843ea7f60a3ae8fdaf64fdc0c7fe66c0d892ca388a8470b50
+type: issue
+locator: https://github.com/vouchdev/vouch/issues/189
+title: 'vouchdev/vouch issue #189 (no fix found) + contrast with issue #100'
+hash: dc52816569f0823843ea7f60a3ae8fdaf64fdc0c7fe66c0d892ca388a8470b50
+immutable: true
+scope:
+  visibility: project
+  project: null
+  agent: null
+byte_size: 830
+media_type: text/plain
+created_at: '2026-07-04T06:11:08.819493Z'
+metadata: {}
+tags: []

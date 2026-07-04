@@ -1,0 +1,15 @@
+id: 2bea22cff37e6643e7da2782beb45db5dbe3b7a696343304f40a4485143b2025
+type: issue
+locator: https://github.com/vouchdev/vouch/issues/76
+title: 'vouchdev/vouch issue #76 + fix commit cdf72ab'
+hash: 2bea22cff37e6643e7da2782beb45db5dbe3b7a696343304f40a4485143b2025
+immutable: true
+scope:
+  visibility: project
+  project: null
+  agent: null
+byte_size: 775
+media_type: text/plain
+created_at: '2026-07-04T06:10:31.107297Z'
+metadata: {}
+tags: []

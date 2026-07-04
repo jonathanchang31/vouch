@@ -1,0 +1,42 @@
+# vouchdev/vouch issue #168
+
+Title: critical: Agent transport allows cross-agent approval
+Author: jonathanchang31
+State on GitHub at audit time: OPEN
+
+## No fix on main or test
+
+  $ git log --oneline -E --grep="#168([^0-9]|$)" upstream/main upstream/test
+  (no output)
+
+Direct code check, upstream/main src/vouch/jsonl_server.py:
+  "kb.approve": _h_approve,
+  "kb.reject": _h_reject,
+registered with no `expose_decision_tools` / trust gate. src/vouch/proposals.py
+`_approval_block_reason()` only checks `approved_by == proposal.proposed_by`
+(same-agent self-approval), so a second agent identity can approve another
+agent's proposal through the JSONL/MCP transport, landing a durable claim
+without any human CLI review. Confirmed identical on upstream/test.
+
+## Prior attempt: PR #169 (closed, unmerged)
+
+PR #169 implemented an `expose_decision_tools` config gate. Maintainer
+review (plind-junior, COLLABORATOR) on 2026-06-09 requested changes:
+
+> **[blocking]** the guard in `handle_request` duplicates the one already
+> inside `_h_approve`/`_h_reject`... the `except Exception` fallback inside
+> the new block silently swallows *any* unexpected error ... and returns
+> `method_not_found` instead of `internal_error`, hiding the real cause.
+
+> **[non-blocking]** `decision_tools_enabled` returns `True` for two
+> independent conditions: `expose_decision_tools: true` **or**
+> `approver_role: trusted-agent`. The `approver_role` path is not mentioned
+> in the updated docs... If vestigial, removing it avoids a hidden unlock
+> path.
+
+The PR was closed on 2026-06-09 without those changes being made.
+
+Conclusion: genuinely open, unfixed, and security-relevant. A resubmission
+should implement a single non-duplicated gate check and either document or
+remove the `approver_role: trusted-agent` bypass, per the maintainer's own
+review notes above.

@@ -1,0 +1,25 @@
+id: vouchdev-vouch-issue-78-kb-context-returns-archived-supersed
+text: 'vouchdev/vouch issue #78 (kb.context returns archived/superseded claims because
+  lifecycle mutations never re-index FTS5 status) is fixed on main by commit 0708c74,
+  which added `_RETRACTED_CLAIM_STATUSES` filtering in src/vouch/context.py, but the
+  GitHub issue is still open.'
+type: fact
+status: working
+confidence: 0.95
+evidence:
+- efb2f2cf4f7a0e2f98ef9fb6fc1734833ec1348be50bcb81a81bc8b677a11e27
+entities: []
+supersedes: []
+superseded_by: null
+contradicts: []
+scope:
+  visibility: project
+  project: null
+  agent: null
+tags:
+- stale-issue
+- codebase-audit
+created_at: '2026-07-04T06:15:28.297524Z'
+updated_at: '2026-07-04T06:15:28.297530Z'
+last_confirmed_at: null
+approved_by: jonathanchang31

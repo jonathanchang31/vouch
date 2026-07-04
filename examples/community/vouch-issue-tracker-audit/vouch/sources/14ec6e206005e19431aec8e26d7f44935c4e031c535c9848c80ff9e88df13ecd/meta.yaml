@@ -1,0 +1,15 @@
+id: 14ec6e206005e19431aec8e26d7f44935c4e031c535c9848c80ff9e88df13ecd
+type: commit
+locator: 'vouchdev/vouch@main: src/vouch/cli.py::source_add + src/vouch/storage.py::put_source'
+title: 'vouchdev/vouch: vouch source add --url is a no-op (self-found)'
+hash: 14ec6e206005e19431aec8e26d7f44935c4e031c535c9848c80ff9e88df13ecd
+immutable: true
+scope:
+  visibility: project
+  project: null
+  agent: null
+byte_size: 2121
+media_type: text/plain
+created_at: '2026-07-04T06:22:08.308903Z'
+metadata: {}
+tags: []

@@ -1,0 +1,19 @@
+# vouchdev/vouch issue #81
+
+Title: bug: Claim model has no min-evidence validator — uncited claims land
+       via bundle import, put_claim, update_claim
+Author: galuis116
+State on GitHub at audit time: OPEN
+
+## Fix commit found on upstream/main
+
+ab54194f280b93a8bf69ab5d871291ac4ce9e95d  2026-05-25
+fix(models): require Claim.evidence to be non-empty at the model layer (#81)
+
+Verified with:
+  $ git log --oneline -E --grep="#81([^0-9]|$)" upstream/main
+  ab54194 fix(models): require Claim.evidence to be non-empty at the model layer (#81)
+
+Conclusion: fixed on main — the validator now lives on the Claim model
+itself, so every write path is covered, not just the CLI/MCP entry points.
+The GitHub issue is still open.

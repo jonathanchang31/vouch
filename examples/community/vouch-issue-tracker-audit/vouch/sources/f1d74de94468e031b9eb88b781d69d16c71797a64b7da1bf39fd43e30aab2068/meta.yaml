@@ -1,0 +1,15 @@
+id: f1d74de94468e031b9eb88b781d69d16c71797a64b7da1bf39fd43e30aab2068
+type: issue
+locator: https://github.com/vouchdev/vouch/issues/93
+title: 'vouchdev/vouch issue #93 + fix commit e7df047'
+hash: f1d74de94468e031b9eb88b781d69d16c71797a64b7da1bf39fd43e30aab2068
+immutable: true
+scope:
+  visibility: project
+  project: null
+  agent: null
+byte_size: 830
+media_type: text/plain
+created_at: '2026-07-04T06:10:50.554665Z'
+metadata: {}
+tags: []

@@ -1,0 +1,29 @@
+# vouchdev/vouch issue #166
+
+Title: [Bug] Bundle import can overwrite the audit log
+Author: jonathanchang31
+State on GitHub at audit time: OPEN
+
+## Fix merged via PR #183
+
+PR #167 (closed, unmerged — GitHub does not allow re-targeting a closed PR's
+base branch) was replaced by PR #183, "fix:bundle import can overwrite the
+audit log", merged 2026-06-09.
+
+Merge commit found on upstream/main and upstream/test:
+6d53c9989ec42f199cb3735ddd82caf3122b6267
+Merge pull request #183 from jonathanchang31/fix/bundle-import-overwrite-audit-log
+
+Verified with:
+  $ git show upstream/main:src/vouch/bundle.py | grep -n "FORBIDDEN_SAFETY_FLAGS\|has_audit_log"
+  49:FORBIDDEN_SAFETY_FLAGS = {
+  52:    "has_audit_log": "audit.log.jsonl",
+  113:            "has_audit_log": False,
+  164:    if name == "audit.log.jsonl":
+  ...
+  (identical result against upstream/test)
+
+Conclusion: fixed and merged into both main and test. The GitHub issue is
+still open — the merge did not auto-close it (likely because the merge
+landed via a squash/merge-pull-request commit rather than a linked
+"Fixes #166" commit message on the default branch at merge time).

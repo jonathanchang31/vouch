@@ -1,0 +1,21 @@
+# vouchdev/vouch issue #189
+
+Title: Richer scopes on Claim/Source: (visibility, project, agent) retrieval
+       filtering (VEP-0005)
+Author: jsdevninja
+State on GitHub at audit time: OPEN
+
+## No matching commit
+
+  $ git log --oneline -E --grep="#189([^0-9]|$)" upstream/main upstream/test
+  (no output)
+
+Related: issue #100 asked for the VEP-0005 *proposal document*, which was
+written (commit 0dba232, see issue-100.md in this KB). This issue (#189) is
+the separate tracking issue for the actual (visibility, project, agent)
+scoping *implementation*. No open PR currently references "Closes #189" /
+"Fixes #189" / "Resolves #189" either (checked against all open PR bodies
+on vouchdev/vouch at audit time).
+
+Conclusion: genuinely open and unclaimed — the VEP was drafted but the
+feature it describes has not been implemented.

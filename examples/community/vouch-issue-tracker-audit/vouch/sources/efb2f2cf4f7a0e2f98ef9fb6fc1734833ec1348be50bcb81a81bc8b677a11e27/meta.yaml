@@ -1,0 +1,15 @@
+id: efb2f2cf4f7a0e2f98ef9fb6fc1734833ec1348be50bcb81a81bc8b677a11e27
+type: issue
+locator: https://github.com/vouchdev/vouch/issues/78
+title: 'vouchdev/vouch issue #78 + fix commit 0708c74'
+hash: efb2f2cf4f7a0e2f98ef9fb6fc1734833ec1348be50bcb81a81bc8b677a11e27
+immutable: true
+scope:
+  visibility: project
+  project: null
+  agent: null
+byte_size: 948
+media_type: text/plain
+created_at: '2026-07-04T06:10:34.304171Z'
+metadata: {}
+tags: []

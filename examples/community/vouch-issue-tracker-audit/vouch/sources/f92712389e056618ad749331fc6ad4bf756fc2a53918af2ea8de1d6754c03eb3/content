@@ -1,0 +1,16 @@
+# vouchdev/vouch issue #95
+
+Title: ux: `vouch serve` should fail clearly when no `.vouch/` KB is present
+Author: plind-junior (COLLABORATOR)
+State on GitHub at audit time: OPEN
+
+## Fix commit found on upstream/main
+
+1af95216f86cf2473045f2a633167a4b13f5f581  2026-05-29
+fix: vouch serve fails fast with clear hint when no KB is present (#95)
+
+Verified with:
+  $ git log --oneline -E --grep="#95([^0-9]|$)" upstream/main
+  1af9521 fix: vouch serve fails fast with clear hint when no KB is present (#95)
+
+Conclusion: fixed on main. The GitHub issue is still open.

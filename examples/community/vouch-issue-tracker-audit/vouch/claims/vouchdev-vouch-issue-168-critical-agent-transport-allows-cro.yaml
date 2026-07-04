@@ -1,0 +1,30 @@
+id: vouchdev-vouch-issue-168-critical-agent-transport-allows-cro
+text: 'vouchdev/vouch issue #168 (critical: agent transport allows cross-agent approval)
+  is still unfixed on both main and test: kb.approve/kb.reject are registered on the
+  JSONL transport with no expose_decision_tools trust gate, and the only check is
+  same-agent self-approval. A prior fix (PR #169) was closed unmerged after a maintainer
+  requested changes: remove the duplicated handle_request guard whose broad except-Exception
+  swallows real errors, and document or remove the undocumented approver_role: trusted-agent
+  bypass.'
+type: fact
+status: working
+confidence: 0.95
+evidence:
+- 77cf22c12729473bdd16015f273b9b7159500a6529a43e9f61910615e9fcc5dc
+entities: []
+supersedes: []
+superseded_by: null
+contradicts: []
+scope:
+  visibility: project
+  project: null
+  agent: null
+tags:
+- live-bug
+- codebase-audit
+- security
+- needs-pr
+created_at: '2026-07-04T06:15:29.862831Z'
+updated_at: '2026-07-04T06:15:29.862838Z'
+last_confirmed_at: null
+approved_by: jonathanchang31

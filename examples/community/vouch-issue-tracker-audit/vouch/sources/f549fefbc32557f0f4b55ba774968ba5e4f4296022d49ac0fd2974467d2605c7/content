@@ -1,0 +1,24 @@
+# vouchdev/vouch issue #100
+
+Title: feat: richer scopes on Claim/Source — `(visibility, project, agent)` [VEP]
+Author: plind-junior (COLLABORATOR)
+State on GitHub at audit time: OPEN
+
+## Commit found on upstream/main
+
+0dba23287f6d9f8fb5a036a7c344793734f5bd92  2026-05-26
+docs(proposals): add VEP-0005 richer scopes on Claim/Source (draft) (#100)
+
+Verified with:
+  $ git log --oneline -E --grep="#100([^0-9]|$)" upstream/main
+  0dba232 docs(proposals): add VEP-0005 richer scopes on Claim/Source (draft) (#100)
+
+Important nuance (see issue #189 in this same KB): this commit only adds the
+VEP-0005 *proposal document*. It is not an implementation. Issue #189
+("Richer scopes on Claim/Source ... (VEP-0005)") is the tracking issue for
+the actual feature and, as of this audit, has no matching commit on main or
+test.
+
+Conclusion: #100 (write the VEP) is done; the underlying feature (#189) is
+not. Both issues are open on GitHub, which is technically correct for #189
+but misleading for #100.
